@@ -55,6 +55,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return;
       }
 
+      // 1. First try direct client-side call with GoogleGenAI SDK for instant validation
+      try {
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: keyToTest });
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: 'Olá Gemini, este é um teste de conexão da chave de API. Responda OK.',
+        });
+        if (response.text) {
+          setTestStatus('success');
+          setTestMessage(`✓ Conexão bem-sucedida! Gemini respondeu: "${response.text.trim().slice(0, 60)}..."`);
+          return;
+        }
+      } catch (clientErr: any) {
+        console.warn('Teste direto no cliente falhou, tentando validação no backend:', clientErr);
+        const errMsg = clientErr?.message || String(clientErr);
+        if (errMsg.includes('401') || errMsg.includes('UNAUTHENTICATED') || errMsg.includes('invalid authentication credentials')) {
+          setTestStatus('error');
+          setTestMessage('❌ Chave de API do Gemini inválida ou sem permissão (Erro 401). Obtenha uma chave válida em https://aistudio.google.com/');
+          return;
+        }
+      }
+
+      // 2. Fallback to server API /api/gemini/chat
       const res = await fetch('/api/gemini/chat', {
         method: 'POST',
         headers: {
@@ -71,7 +95,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       try {
         data = JSON.parse(rawText);
       } catch {
-        data = { success: false, error: 'O servidor não retornou um JSON válido. Certifique-se de usar uma chave do Google AI Studio (iniciando com "AIzaSy...").' };
+        data = {
+          success: false,
+          error: 'No ambiente da Vercel, defina a variável GEMINI_API_KEY nas configurações do projeto Vercel (Environment Variables) ou use uma chave válida do Google AI Studio.',
+        };
       }
 
       if (data.success && data.data?.replyText) {
@@ -87,7 +114,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }
     } catch (err: any) {
       setTestStatus('error');
-      setTestMessage(`❌ Erro de rede ou chave inválida: ${err.message}`);
+      setTestMessage(`❌ Erro de conexão: ${err.message}`);
     }
   };
 

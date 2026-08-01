@@ -56,6 +56,9 @@ async function callGeminiWithFallback<T>(
       return await actionFn(customAI);
     } catch (customErr: any) {
       console.warn("⚠️ Chave customizada enviada pelo cliente falhou. Tentando chave .env...", customErr?.message || customErr);
+      if (!envKey || envKey === DEFAULT_KEY) {
+        throw customErr;
+      }
     }
   }
 
@@ -72,17 +75,18 @@ async function callGeminiWithFallback<T>(
     return await actionFn(fallbackAI);
   }
 
-  throw new Error("Nenhuma chave de API do Gemini válida configurada no .env ou enviada pelo usuário.");
+  throw new Error("Nenhuma chave de API do Gemini válida configurada no .env da Vercel ou enviada pelo usuário.");
 }
 
 // API Routes
 
 // 1. Health check
-app.get("/api/health", (req, res) => {
+app.get(["/api/health", "/health"], (req, res) => {
   res.json({ status: "ok", environment: process.env.VERCEL ? "vercel" : "local", timestamp: new Date().toISOString() });
 });
+
 // 2. Chat & Advisor Route (With Task Function Calling / Extraction)
-app.post("/api/gemini/chat", async (req, res) => {
+app.post(["/api/gemini/chat", "/gemini/chat"], async (req, res) => {
   try {
     const { message, currentTasks, userContext, personality, customInstructions } = req.body;
 
@@ -179,7 +183,7 @@ ${JSON.stringify(currentTasks || [], null, 2)}
 });
 
 // 3. Vision Analysis of User Video Frame
-app.post("/api/gemini/analyze-frame", async (req, res) => {
+app.post(["/api/gemini/analyze-frame", "/gemini/analyze-frame"], async (req, res) => {
   try {
     const { imageBase64, personality } = req.body;
 
@@ -223,7 +227,7 @@ Faça um comentário inteligente e encorajador em 2 a 3 frases em português do 
 });
 
 // 4. TTS (Text-to-Speech) API for AI Voice in Video Call
-app.post("/api/gemini/speak", async (req, res) => {
+app.post(["/api/gemini/speak", "/gemini/speak"], async (req, res) => {
   try {
     const { text, voiceName } = req.body;
     if (!text) {
@@ -261,7 +265,7 @@ app.post("/api/gemini/speak", async (req, res) => {
 });
 
 // 5. Proactive Task Reminder Voice Alert Generator
-app.post("/api/gemini/reminder-voice", async (req, res) => {
+app.post(["/api/gemini/reminder-voice", "/gemini/reminder-voice"], async (req, res) => {
   try {
     const { taskName, estimatedTime, startDate } = req.body;
 
@@ -289,7 +293,7 @@ app.post("/api/gemini/reminder-voice", async (req, res) => {
 });
 
 // 6. Download Full Project as ZIP
-app.get("/api/download-zip", async (req, res) => {
+app.get(["/api/download-zip", "/download-zip"], async (req, res) => {
   let tmpPath = "";
   try {
     const AdmZipModule = await import("adm-zip");
