@@ -304,7 +304,7 @@ export async function playAIVoice(text: string, customVoice?: string): Promise<v
   }
 
   // Option C: Native Web Speech API Fallback (Smooth, zero red console errors)
-  speakWithWebSpeech(text);
+  await speakWithWebSpeech(text);
 }
 
 // Fallback to Web Speech API

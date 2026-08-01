@@ -62,6 +62,16 @@ export default function App() {
   const silenceTimerRef = useRef<any>(null);
   const pendingInterimRef = useRef<string>('');
 
+  // VAD Continuous Voice Streamer Refs
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadAudioCtxRef = useRef<AudioContext | null>(null);
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
+  const vadRecorderRef = useRef<MediaRecorder | null>(null);
+  const vadChunksRef = useRef<Blob[]>([]);
+  const isVadRecordingRef = useRef<boolean>(false);
+  const lastSpeechTimeRef = useRef<number>(0);
+  const speechStartTimeRef = useRef<number>(0);
+
   // Save tasks to LocalStorage on change
   useEffect(() => {
     localStorage.setItem('app_tasks', JSON.stringify(tasks));
@@ -441,6 +451,135 @@ export default function App() {
       }, 3000);
     }
   };
+
+  // CONTINUOUS VOICE PACKET STREAMER (VAD - Voice Activity Detection)
+  // Automatically captures audio chunks as the user speaks hands-free and sends them to Gemini AI!
+  useEffect(() => {
+    let vadInterval: any = null;
+    let activeStream: MediaStream | null = null;
+    let activeAudioCtx: AudioContext | null = null;
+
+    if (isCallActive && isMicOn && isHandsFreeMode && !isRecordingAudio) {
+      const initVad = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          vadStreamRef.current = stream;
+          activeStream = stream;
+
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const audioCtx = new AudioContextClass();
+          vadAudioCtxRef.current = audioCtx;
+          activeAudioCtx = audioCtx;
+
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          vadAnalyserRef.current = analyser;
+
+          const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm'))
+            ? 'audio/webm'
+            : 'audio/mp4';
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          vadInterval = setInterval(() => {
+            // Do not capture voice packets while AI is thinking or speaking or when user is manually recording
+            if (isLoadingAi || aiState === 'SPEAKING' || isRecordingAudio) {
+              if (isVadRecordingRef.current && vadRecorderRef.current && vadRecorderRef.current.state !== 'inactive') {
+                try { vadRecorderRef.current.stop(); } catch (e) {}
+                isVadRecordingRef.current = false;
+              }
+              return;
+            }
+
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const avgVolume = sum / dataArray.length;
+            const now = Date.now();
+
+            // Speech detected (volume threshold > 12)
+            if (avgVolume > 12) {
+              lastSpeechTimeRef.current = now;
+
+              if (!isVadRecordingRef.current) {
+                isVadRecordingRef.current = true;
+                speechStartTimeRef.current = now;
+                vadChunksRef.current = [];
+
+                try {
+                  const recorder = new MediaRecorder(stream, { mimeType });
+                  recorder.ondataavailable = (e) => {
+                    if (e.data && e.data.size > 0) {
+                      vadChunksRef.current.push(e.data);
+                    }
+                  };
+
+                  recorder.onstop = () => {
+                    const duration = Date.now() - speechStartTimeRef.current;
+                    const chunks = vadChunksRef.current;
+                    isVadRecordingRef.current = false;
+
+                    if (duration > 500 && chunks.length > 0) {
+                      const audioBlob = new Blob(chunks, { type: mimeType });
+                      if (audioBlob.size > 600) {
+                        setInterimTranscript('⚡ Enviando pacote de voz para a IA...');
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = async () => {
+                          const base64 = reader.result as string;
+                          setInterimTranscript('');
+                          await handleAudioMessage(base64, mimeType);
+                        };
+                      }
+                    }
+                  };
+
+                  recorder.start(100);
+                  vadRecorderRef.current = recorder;
+                  setInterimTranscript('🎙️ Capturando sua voz (pacote em tempo real)...');
+                  setAiState('LISTENING');
+                } catch (recErr) {
+                  console.warn('Erro ao ligar gravador VAD:', recErr);
+                  isVadRecordingRef.current = false;
+                }
+              }
+            } else if (isVadRecordingRef.current) {
+              // Silence detected after speech (800ms)
+              if (now - lastSpeechTimeRef.current > 800) {
+                if (vadRecorderRef.current && vadRecorderRef.current.state !== 'inactive') {
+                  try {
+                    vadRecorderRef.current.stop();
+                  } catch (e) {}
+                }
+              }
+            }
+          }, 70);
+        } catch (err) {
+          console.warn('Erro ao inicializar VAD Audio Stream:', err);
+        }
+      };
+
+      initVad();
+    }
+
+    return () => {
+      if (vadInterval) clearInterval(vadInterval);
+      if (vadRecorderRef.current && vadRecorderRef.current.state !== 'inactive') {
+        try { vadRecorderRef.current.stop(); } catch (e) {}
+      }
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
+      }
+      if (activeAudioCtx && activeAudioCtx.state !== 'closed') {
+        try { activeAudioCtx.close(); } catch (e) {}
+      }
+      isVadRecordingRef.current = false;
+    };
+  }, [isCallActive, isMicOn, isHandsFreeMode, isRecordingAudio, isLoadingAi, aiState]);
 
   // Main User Query Handler (Calls Gemini Backend Chat API)
   const handleUserMessage = async (text: string) => {
