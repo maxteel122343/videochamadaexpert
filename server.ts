@@ -11,12 +11,28 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "25mb" }));
 
-// Default fallback key from environment
-const DEFAULT_KEY = process.env.GEMINI_API_KEY || "";
-
 // Official supported Gemini API models
 const GEMINI_TEXT_MODEL = "gemini-3.6-flash";
 const GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+
+// Default fallback key
+const DEFAULT_KEY = "AQ.Ab8RN6LQI_k-dZOrvRJk_7mXFiSyKvPZZ17WmpYrU9kG5vs-1w";
+
+// Helper to clean up raw JSON errors from Gemini API
+function formatGeminiError(error: any): string {
+  if (!error) return "Erro desconhecido na API do Gemini";
+  const msg = typeof error === "string" ? error : error.message || JSON.stringify(error);
+  if (msg.includes("401") || msg.includes("UNAUTHENTICATED") || msg.includes("invalid authentication credentials")) {
+    return "Chave de API do Gemini inválida ou não autorizada (Erro 401). Forneça uma chave válida do Google AI Studio (iniciando com 'AIzaSy...') nas Configurações do app.";
+  }
+  try {
+    const parsed = JSON.parse(msg);
+    if (parsed?.error?.message) {
+      return `[Erro ${parsed.error.code || 400}] ${parsed.error.message}`;
+    }
+  } catch {}
+  return msg;
+}
 
 // Helper to execute a Gemini API call with proper key priority & fallback
 async function callGeminiWithFallback<T>(
@@ -25,11 +41,11 @@ async function callGeminiWithFallback<T>(
 ): Promise<T> {
   const customKey = (req?.headers["x-gemini-api-key"] as string) || req?.body?.apiKey;
   const envKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY"
-    ? process.env.GEMINI_API_KEY
-    : "";
+    ? process.env.GEMINI_API_KEY.trim()
+    : DEFAULT_KEY;
 
   // 1. Try Custom Header Key if provided by user
-  if (customKey && customKey.trim() && customKey.trim() !== envKey) {
+  if (customKey && customKey.trim()) {
     try {
       const customAI = new GoogleGenAI({
         apiKey: customKey.trim(),
@@ -41,20 +57,24 @@ async function callGeminiWithFallback<T>(
       });
       return await actionFn(customAI);
     } catch (customErr: any) {
-      console.warn("⚠️ Chave customizada falhou. Ativando fallback automático para a chave de ambiente .env...", customErr?.message || customErr);
+      console.warn("⚠️ Chave customizada enviada pelo cliente falhou. Tentando chave .env...", customErr?.message || customErr);
     }
   }
 
-  // 2. Try process.env.GEMINI_API_KEY or DEFAULT_KEY
-  const fallbackAI = new GoogleGenAI({
-    apiKey: envKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
+  // 2. Try process.env.GEMINI_API_KEY
+  if (envKey) {
+    const fallbackAI = new GoogleGenAI({
+      apiKey: envKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
       },
-    },
-  });
-  return await actionFn(fallbackAI);
+    });
+    return await actionFn(fallbackAI);
+  }
+
+  throw new Error("Nenhuma chave de API do Gemini válida configurada no .env ou enviada pelo usuário.");
 }
 
 // API Routes
@@ -147,8 +167,16 @@ ${JSON.stringify(currentTasks || [], null, 2)}
 
     res.json({ success: true, data: parsedData });
   } catch (error: any) {
-    console.error("Gemini Chat Error:", error);
-    res.status(500).json({ success: false, error: error.message || "Erro na comunicação com a API do Gemini" });
+    const formattedErr = formatGeminiError(error);
+    console.warn("Gemini Chat Warning:", formattedErr);
+    res.json({
+      success: false,
+      error: formattedErr,
+      data: {
+        replyText: "Não foi possível conectar à API do Gemini no momento, mas suas tarefas e controles continuam funcionando perfeitamente.",
+        adviceBullets: ["Verifique sua chave de API nas Configurações.", "Sua chamada continuará com recursos locais."]
+      }
+    });
   }
 });
 
@@ -158,7 +186,7 @@ app.post("/api/gemini/analyze-frame", async (req, res) => {
     const { imageBase64, personality } = req.body;
 
     if (!imageBase64) {
-      return res.status(400).json({ success: false, error: "Nenhuma imagem enviada." });
+      return res.json({ success: false, error: "Nenhuma imagem enviada." });
     }
 
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
@@ -186,8 +214,13 @@ Faça um comentário inteligente e encorajador em 2 a 3 frases em português do 
 
     res.json({ success: true, analysis: response.text });
   } catch (error: any) {
-    console.error("Gemini Vision Error:", error);
-    res.status(500).json({ success: false, error: error.message || "Erro na análise de visão do Gemini" });
+    const formattedErr = formatGeminiError(error);
+    console.warn("Gemini Vision Warning:", formattedErr);
+    res.json({
+      success: false,
+      error: formattedErr,
+      analysis: "Câmera ativa na videochamada. Mantenha a postura e o foco no seu trabalho!"
+    });
   }
 });
 
@@ -196,16 +229,7 @@ app.post("/api/gemini/speak", async (req, res) => {
   try {
     const { text, voiceName } = req.body;
     if (!text) {
-      return res.status(400).json({ success: false, error: "Texto é obrigatório" });
-    }
-
-    const customKey = (req?.headers["x-gemini-api-key"] as string) || req?.body?.apiKey;
-    const envKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY"
-      ? process.env.GEMINI_API_KEY
-      : "";
-
-    if (!customKey && !envKey) {
-      return res.json({ success: false, message: "Síntese nativa do navegador ativada (Sem chave de API configurada no servidor)" });
+      return res.json({ success: false, error: "Texto é obrigatório" });
     }
 
     const chosenVoice = voiceName || "Kore"; // Kore, Aoede, Fenrir, Puck, Charon
@@ -229,11 +253,12 @@ app.post("/api/gemini/speak", async (req, res) => {
     if (base64Audio) {
       return res.json({ success: true, audioBase64: base64Audio, voiceUsed: chosenVoice });
     }
-    return res.json({ success: false, message: "Áudio nativo não retornado; o navegador usará síntese de voz." });
+    return res.json({ success: false, message: "Áudio nativo não retornado; o navegador usará síntese de voz local." });
   } catch (error: any) {
-    console.warn("Gemini TTS Warning:", error?.message || error);
+    const formattedErr = formatGeminiError(error);
+    console.warn("Gemini TTS Warning:", formattedErr);
     // Return non-500 graceful status so frontend seamlessly uses Web Speech API synthesis without crashing
-    return res.json({ success: false, message: "Síntese nativa do navegador ativada", error: error?.message });
+    res.json({ success: false, message: "Síntese nativa do navegador ativada", error: formattedErr });
   }
 });
 
@@ -256,8 +281,12 @@ app.post("/api/gemini/reminder-voice", async (req, res) => {
 
     res.json({ success: true, reminderSpeech: response.text });
   } catch (error: any) {
-    console.error("Reminder voice error:", error);
-    res.status(500).json({ success: false, error: error.message || "Erro na API Gemini" });
+    console.warn("Reminder voice warning:", error?.message || error);
+    res.json({
+      success: false,
+      error: error.message,
+      reminderSpeech: `Atenção: A tarefa "${req.body.taskName || 'agendada'}" está começando agora!`
+    });
   }
 });
 

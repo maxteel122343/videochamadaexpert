@@ -48,7 +48,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTestStatus('testing');
     setTestMessage('Conectando à API do Gemini...');
     try {
-      const keyToTest = geminiApiKey.trim() || DEFAULT_GEMINI_KEY;
+      const keyToTest = geminiApiKey.trim();
+      if (!keyToTest) {
+        setTestStatus('error');
+        setTestMessage('❌ Informe uma chave de API para realizar o teste.');
+        return;
+      }
+
       const res = await fetch('/api/gemini/chat', {
         method: 'POST',
         headers: {
@@ -66,7 +72,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         setTestMessage(`✓ Conexão bem-sucedida! Gemini respondeu: "${data.data.replyText.slice(0, 60)}..."`);
       } else {
         setTestStatus('error');
-        setTestMessage(`❌ Falha: ${data.error || 'A chave informada não respondeu.'}`);
+        let errStr = data.error || 'A chave informada não respondeu.';
+        if (errStr.includes('401') || errStr.includes('UNAUTHENTICATED')) {
+          errStr = 'Chave de API do Gemini inválida ou sem permissão (Erro 401). Obtenha uma chave em https://aistudio.google.com/';
+        }
+        setTestMessage(`❌ Falha na Autenticação: ${errStr}`);
       }
     } catch (err: any) {
       setTestStatus('error');
