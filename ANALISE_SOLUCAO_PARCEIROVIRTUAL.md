@@ -4,13 +4,36 @@ Este documento detalha o funcionamento, arquitetura e estratégias de tratamento
 
 ---
 
-## 🚨 Diagnóstico do Problema Original
+## 🚨 Diagnóstico do Problema Original no Servidor (Vercel 500)
 
-Ao publicar aplicações na Vercel que utilizam síntese de voz do Gemini via rotas serverless Express (`/api/gemini/speak`), ocorrem falhas recorrentes de **HTTP 500 (Internal Server Error)** devido a:
+Ao publicar aplicações na Vercel que utilizam síntese de voz do Gemini via rotas serverless Express (`POST /api/gemini/speak`), ocorrem falhas de **HTTP 500 (Internal Server Error)** principalmente por 3 motivos de infraestrutura:
 
-1. **Variáveis de Ambiente Faltantes ou Mal Configuradas**: Ausência da chave `GEMINI_API_KEY` no painel da Vercel.
-2. **Timeout de Serverless Functions**: A Vercel possui um limite padrão de tempo de execução (10s no plano Free/Hobby). Chamadas diretas de modelos pesados de áudio podem exceder esse limite.
-3. **Erros Não Tratados no Servidor Backend**: Exceções não capturadas no backend lançavam HTTP 500 de volta para o frontend, interrompendo a chamada de vídeo.
+1. **Timeout de 10 Segundos da Vercel**: Funções Serverless no plano gratuito/Hobby da Vercel têm um limite máximo de execução de 10 segundos. Como a síntese de voz (TTS) do Gemini envolve processamento pesado de áudio, a requisição frequentemente ultrapassa 10s e a Vercel **derruba a rota com Erro 500**.
+2. **Estouro de Payload de Áudio**: Enviar arquivos de áudio binários/Base64 através do servidor Express na Vercel consome memória da função serverless e gera tráfego desnecessário.
+3. **Ausência ou Falha na Injeção de `GEMINI_API_KEY`**: Se as variáveis de ambiente no servidor serverless falharem, o Express lança uma exceção não tratada ao inicializar o SDK do Gemini.
+
+---
+
+## ⚡ A Sacada Principal: Eliminação do Servidor Intermediário (Client-Side Direct Call)
+
+A grande descoberta de como o `parceirovirtual-main` resolveu o "lance do servidor" foi **TIRAR O SERVIDOR DA JOGADA** para o processamento de áudio/síntese:
+
+* **No projeto antigo (com Erro 500)**:  
+  `Navegador` ➡️ `Servidor Vercel (/api/gemini/speak)` ➡️ `Google Gemini API` ➡️ `Servidor Vercel` (Timeout 500!) ➡️ `Navegador`
+
+* **No `parceirovirtual-main` (Solução Funcional)**:  
+  `Navegador (React)` ➡️ `Google Gemini API (Direto via @google/genai SDK)` ➡️ `Navegador (Web Audio API / SpeechSynthesis)`
+
+O frontend instancia o cliente do Gemini diretamente no navegador:
+```typescript
+// Executado diretamente no cliente (React / CallScreen.tsx)
+const ai = new GoogleGenAI({ apiKey: userApiKey || process.env.GEMINI_API_KEY });
+```
+
+Dessa forma:
+* **Zero Timeout de Servidor**: O servidor Node.js/Vercel nem fica sabendo da geração do áudio.
+* **Velocidade Máxima**: O áudio vai direto dos servidores do Google para a memória RAM do navegador do usuário.
+* **Custo Zero de Servidor**: Economiza limites de execução serverless na Vercel.
 
 ---
 
