@@ -96,16 +96,27 @@ export default function App() {
       if (!isCallActive) return;
 
       const now = new Date();
+      const nowMs = now.getTime();
       const pad = (n: number) => n.toString().padStart(2, '0');
       const currentIsoMinutes = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
       // Find an active task (PENDENTE or A FAZER) whose start time is due and hasn't reminded yet
-      const dueTask = tasks.find(
-        (t) =>
-          (t.status === 'PENDENTE' || t.status === 'A FAZER') &&
-          !t.reminded &&
-          t.startDate <= currentIsoMinutes
-      );
+      const dueTask = tasks.find((t) => {
+        if ((t.status !== 'PENDENTE' && t.status !== 'A FAZER') || t.reminded) {
+          return false;
+        }
+        if (!t.startDate) return false;
+
+        // Date parse check
+        const taskDate = new Date(t.startDate);
+        const taskMs = taskDate.getTime();
+
+        if (!isNaN(taskMs)) {
+          return taskMs <= nowMs + 10000;
+        }
+
+        return t.startDate <= currentIsoMinutes;
+      });
 
       if (dueTask && (!inCallReminder || inCallReminder.task.id !== dueTask.id)) {
         // Trigger In-Call Reminder!
@@ -144,16 +155,16 @@ export default function App() {
           playAIVoice(reminderSpeech);
         }
       }
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [isCallActive, tasks, inCallReminder, isMutedAI]);
 
-  // Handle Web Speech Recognition (Mic Voice Input during Call with continuous auto-restart & live transcript)
+  // Handle Web Speech Recognition (Continuous Hands-Free Speech Input during Call)
   useEffect(() => {
     let isStoppedIntentionally = false;
 
-    if (isCallActive && isMicOn && !isLoadingAi) {
+    if (isCallActive && isMicOn) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
@@ -163,7 +174,7 @@ export default function App() {
           recognition.lang = 'pt-BR';
 
           recognition.onstart = () => {
-            setAiState((prev) => (prev === 'SPEAKING' ? 'SPEAKING' : 'LISTENING'));
+            setAiState((prev) => (prev === 'SPEAKING' || prev === 'THINKING' ? prev : 'LISTENING'));
           };
 
           recognition.onresult = (event: any) => {
@@ -191,30 +202,32 @@ export default function App() {
 
               if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
               silenceTimerRef.current = setTimeout(() => {
-                if (pendingInterimRef.current && pendingInterimRef.current.length > 2) {
+                if (pendingInterimRef.current && pendingInterimRef.current.length >= 2) {
                   const textToSend = pendingInterimRef.current;
                   pendingInterimRef.current = '';
                   setInterimTranscript('');
                   handleUserMessage(textToSend);
                 }
-              }, 1200);
+              }, 900);
             }
           };
 
           recognition.onerror = (err: any) => {
-            console.warn('Aviso de reconhecimento de voz:', err.error || err);
+            if (err.error !== 'no-speech') {
+              console.warn('Aviso de reconhecimento de voz:', err.error || err);
+            }
             if (err.error === 'not-allowed') {
               setInterimTranscript('Permissão do microfone negada no navegador.');
             }
           };
 
           recognition.onend = () => {
-            if (!isStoppedIntentionally && isCallActive && isMicOn && !isLoadingAi) {
+            if (!isStoppedIntentionally && isCallActive && isMicOn) {
               setTimeout(() => {
                 try {
                   recognition.start();
                 } catch (e) {}
-              }, 300);
+              }, 200);
             }
           };
 
@@ -243,7 +256,7 @@ export default function App() {
         } catch (e) {}
       }
     };
-  }, [isCallActive, isMicOn, isLoadingAi]);
+  }, [isCallActive, isMicOn]);
 
   // Handle direct audio recording with MediaRecorder (Push-to-talk / Direct Voice button)
   const startAudioRecording = async () => {
@@ -301,6 +314,30 @@ export default function App() {
     }
   };
 
+  // Helper to extract task from user speech/text if AI didn't return newTask object
+  const extractTaskFromText = (userText: string): string | null => {
+    if (!userText) return null;
+    const lower = userText.toLowerCase();
+    const keywords = [
+      'criar tarefa de ', 'criar tarefa da ', 'criar tarefa do ', 'criar tarefa ',
+      'criar a tarefa de ', 'criar a tarefa ', 'agendar tarefa de ', 'agendar tarefa ',
+      'adicionar tarefa ', 'lembrar de ', 'lembrar do ', 'lembrar da ', 'tarefa de ', 'tarefa '
+    ];
+
+    for (const kw of keywords) {
+      if (lower.includes(kw)) {
+        const idx = lower.indexOf(kw);
+        let rawName = userText.slice(idx + kw.length).trim();
+        // Remove trailing polite or punctuation marks
+        rawName = rawName.replace(/(\.|\!|\?|por favor|obrigado)$/i, '').trim();
+        if (rawName.length >= 2) {
+          return rawName.charAt(0).toUpperCase() + rawName.slice(1);
+        }
+      }
+    }
+    return null;
+  };
+
   // Process Direct Audio Voice Message with Gemini Multimodal API
   const handleAudioMessage = async (audioBase64: string, mimeType: string) => {
     setIsLoadingAi(true);
@@ -327,13 +364,13 @@ export default function App() {
 
       let createdTask: Task | undefined = undefined;
 
-      if (result.newTask && result.newTask.name) {
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const defaultStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        const endObj = new Date(now.getTime() + 60 * 60 * 1000);
-        const defaultEnd = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const defaultStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const endObj = new Date(now.getTime() + 60 * 60 * 1000);
+      const defaultEnd = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
 
+      if (result.newTask && result.newTask.name) {
         const taskToAdd: Task = {
           id: `task-${Date.now()}`,
           name: result.newTask.name,
@@ -348,6 +385,24 @@ export default function App() {
 
         setTasks((prev) => [taskToAdd, ...prev]);
         createdTask = taskToAdd;
+      } else {
+        // Fallback extraction
+        const fallbackName = extractTaskFromText(userText);
+        if (fallbackName) {
+          const taskToAdd: Task = {
+            id: `task-${Date.now()}`,
+            name: fallbackName,
+            startDate: defaultStart,
+            endDate: defaultEnd,
+            estimatedTime: '30 minutos',
+            status: 'PENDENTE',
+            priority: 'média',
+            category: 'Pessoal',
+            createdAt: new Date().toISOString(),
+          };
+          setTasks((prev) => [taskToAdd, ...prev]);
+          createdTask = taskToAdd;
+        }
       }
 
       setMessages((prev) => [
@@ -376,7 +431,15 @@ export default function App() {
 
   // Main User Query Handler (Calls Gemini Backend Chat API)
   const handleUserMessage = async (text: string) => {
-    if (!text.trim() || isLoadingAi) return;
+    if (!text.trim()) return;
+
+    // If AI is currently loading/speaking, wait a short moment to avoid dropping hands-free speech
+    if (isLoadingAi) {
+      setTimeout(() => {
+        handleUserMessage(text);
+      }, 800);
+      return;
+    }
 
     const userMsgId = `msg-${Date.now()}`;
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -398,14 +461,14 @@ export default function App() {
 
       let createdTask: Task | undefined = undefined;
 
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const defaultStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const endObj = new Date(now.getTime() + 60 * 60 * 1000);
+      const defaultEnd = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
+
       // Handle Automatic Task Creation from AI response
       if (data.newTask && data.newTask.name) {
-        const now = new Date();
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const defaultStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        const endObj = new Date(now.getTime() + 60 * 60 * 1000);
-        const defaultEnd = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
-
         const taskToAdd: Task = {
           id: `task-${Date.now()}`,
           name: data.newTask.name,
@@ -420,6 +483,24 @@ export default function App() {
 
         setTasks((prev) => [taskToAdd, ...prev]);
         createdTask = taskToAdd;
+      } else {
+        // Fallback extraction if AI didn't return newTask object
+        const fallbackName = extractTaskFromText(text);
+        if (fallbackName) {
+          const taskToAdd: Task = {
+            id: `task-${Date.now()}`,
+            name: fallbackName,
+            startDate: defaultStart,
+            endDate: defaultEnd,
+            estimatedTime: '30 minutos',
+            status: 'PENDENTE',
+            priority: 'média',
+            category: 'Pessoal',
+            createdAt: new Date().toISOString(),
+          };
+          setTasks((prev) => [taskToAdd, ...prev]);
+          createdTask = taskToAdd;
+        }
       }
 
       setMessages((prev) => [

@@ -90,31 +90,41 @@ app.post(["/api/gemini/chat", "/gemini/chat"], async (req, res) => {
   try {
     const { message, currentTasks, userContext, personality, customInstructions } = req.body;
 
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const currentNowIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
     const systemInstruction = `Você é a "IA Consultora de Vídeo & Produtividade", uma assistente de vídeo chamada em tempo real de altíssima inteligência.
 Seu objetivo é conversar diretamente com o usuário com um tom de voz atraente, envolvente, humano e cativante em português do Brasil (pt-BR).
 Você oferece conselhos valiosos, perspicazes e extremamente práticos sobre vida, carreira, estudos, rotina, saúde e planejamento.
+
+Horário e Data Atual do Sistema: "${currentNowIso}".
 
 Personalidade e estilo de comunicação: ${personality || "Acolhedora, Atraente e Muito Inteligente"}.
 ${customInstructions ? `Instruções adicionais do usuário: ${customInstructions}` : ''}
 
 Mantenha respostas conversacionais fluidas de 2 a 4 frases, ideais para serem lidas em voz alta na videochamada.
 
-Se o usuário pedir a criação de uma tarefa (ou se o contexto da fala implicar uma ação programada ou compromisso com nome, horário ou tempo estimado), preencha o campo "newTask" na resposta JSON.
-Status válidos para tarefas: "PENDENTE", "A FAZER", "CONCLUIDO".
+CRIAÇÃO E AGENDAMENTO DE TAREFA:
+Se o usuário pedir para criar, agendar ou lembrar de uma tarefa (ex: "criar tarefa dormir", "agendar dormir", "lembrar de beber água", "criar tarefa estudar"):
+1. Você DEVE obrigatoriamente preencher o objeto "newTask" na resposta JSON.
+2. Defina "startDate" no formato ISO "YYYY-MM-DDTHH:mm".
+   - Se o usuário não especificou um horário futuro exato ou pediu para criar agora (ex: "criar tarefa dormir"), defina "startDate" exatamente como a hora atual ("${currentNowIso}") para que a tarefa seja exibida no painel e o alarme de voz acione na chamada imediatamente.
+3. Status válidos para tarefas: "PENDENTE", "A FAZER", "CONCLUIDO".
 
 Sua resposta DEVE ser um objeto JSON no seguinte formato:
 {
-  "replyText": "Sua resposta conversacional em português com voz atraente e tom perspicaz.",
-  "adviceBullets": ["Conselho prático 1", "Conselho prático 2"],
+  "replyText": "Sua resposta conversacional confirmando a criação da tarefa com tom positivo e voz atraente.",
+  "adviceBullets": ["Conselho prático 1"],
   "newTask": {
     "name": "Nome da tarefa",
-    "startDate": "YYYY-MM-DDTHH:mm (Data e hora de início)",
-    "endDate": "YYYY-MM-DDTHH:mm (Data e hora de término)",
-    "estimatedTime": "Ex: 30 minutos, 1 hora",
-    "status": "PENDENTE" | "A FAZER" | "CONCLUIDO",
+    "startDate": "YYYY-MM-DDTHH:mm",
+    "endDate": "YYYY-MM-DDTHH:mm",
+    "estimatedTime": "Ex: 30 minutos, 8 horas",
+    "status": "PENDENTE",
     "priority": "baixa" | "média" | "alta",
-    "category": "Estudos | Trabalho | Pessoal | Saúde"
-  } (opcional)
+    "category": "Pessoal" | "Trabalho" | "Saúde" | "Estudos" | "Geral"
+  }
 }
 
 Lista atual de tarefas do usuário:
@@ -193,13 +203,23 @@ app.post(["/api/gemini/audio-chat", "/gemini/audio-chat"], async (req, res) => {
 
     const cleanAudio = audioBase64.replace(/^data:audio\/\w+;(codecs=\w+;)?base64,/, "");
 
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const currentNowIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
     const systemInstruction = `Você é a "IA Consultora de Vídeo & Produtividade", uma assistente de vídeo chamada em tempo real de altíssima inteligência.
 Seu objetivo é ouvir o áudio do usuário, transcrever o que ele falou e responder diretamente com tom conversacional, humano, atraente e cativante em português do Brasil (pt-BR).
+Horário e Data Atual do Sistema: "${currentNowIso}".
+
 Personalidade: ${personality || "Acolhedora, Atraente e Muito Inteligente"}.
 ${customInstructions ? `Instruções adicionais: ${customInstructions}` : ''}
 
 Mantenha a resposta "replyText" conversacional de 2 a 4 frases para leitura em voz alta.
-Se o usuário pediu para criar ou agendar uma tarefa no áudio, preencha o campo "newTask".
+
+CRIAÇÃO DE TAREFA EM ÁUDIO:
+Se o usuário pediu para criar ou agendar uma tarefa no áudio (ex: "criar tarefa dormir", "lembrar de estudar", "agendar reunião"):
+1. Preencha obrigatoriamente o campo "newTask" na resposta JSON.
+2. Defina "startDate" como "${currentNowIso}" (se para agora) ou o horário especificado.
 
 Sua resposta DEVE ser um objeto JSON com o seguinte formato:
 {
