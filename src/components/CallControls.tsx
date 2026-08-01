@@ -23,6 +23,8 @@ interface CallControlsProps {
   onToggleVideo: () => void;
   isMutedAI: boolean;
   onToggleMuteAI: () => void;
+  isHandsFreeMode?: boolean;
+  onToggleHandsFreeMode?: () => void;
   isTasksOpen: boolean;
   onToggleTasks: () => void;
   isChatOpen: boolean;
@@ -41,6 +43,8 @@ export const CallControls: React.FC<CallControlsProps> = ({
   onToggleVideo,
   isMutedAI,
   onToggleMuteAI,
+  isHandsFreeMode = true,
+  onToggleHandsFreeMode,
   isTasksOpen,
   onToggleTasks,
   isChatOpen,
@@ -67,6 +71,24 @@ export const CallControls: React.FC<CallControlsProps> = ({
         >
           {isMicOn ? <Mic className="w-5 h-5 md:w-6 md:h-6" /> : <MicOff className="w-5 h-5 md:w-6 md:h-6" />}
         </button>
+
+        {onToggleHandsFreeMode && (
+          <button
+            onClick={onToggleHandsFreeMode}
+            disabled={!isCallActive || !isMicOn}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border shadow-sm ${
+              !isCallActive || !isMicOn
+                ? 'bg-slate-800/50 text-slate-600 border-white/5 cursor-not-allowed'
+                : isHandsFreeMode
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900/80'
+                : 'bg-slate-800 text-slate-400 border-white/10 hover:bg-slate-700'
+            }`}
+            title={isHandsFreeMode ? 'Mãos Livres Ativo: Fale diretamente sem clicar' : 'Ativar Conversa Mãos Livres Contínua'}
+          >
+            <span className={`w-2 h-2 rounded-full ${isHandsFreeMode ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
+            <span className="hidden lg:inline">{isHandsFreeMode ? 'Mãos Livres: ON' : 'Mãos Livres: OFF'}</span>
+          </button>
+        )}
 
         <button
           onClick={onToggleVideo}

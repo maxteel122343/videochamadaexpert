@@ -48,6 +48,7 @@ export default function App() {
   ]);
 
   const [inCallReminder, setInCallReminder] = useState<InCallReminder | null>(null);
+  const [isHandsFreeMode, setIsHandsFreeMode] = useState<boolean>(true);
   const [isTasksOpen, setIsTasksOpen] = useState<boolean>(true);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isAdviceModalOpen, setIsAdviceModalOpen] = useState<boolean>(false);
@@ -178,6 +179,11 @@ export default function App() {
           };
 
           recognition.onresult = (event: any) => {
+            // Ignore mic speech if AI is currently thinking or speaking to prevent speaker echo feedback
+            if (isLoadingAi || aiState === 'SPEAKING') {
+              return;
+            }
+
             let finalTranscript = '';
             let interimText = '';
 
@@ -190,25 +196,32 @@ export default function App() {
               }
             }
 
-            if (finalTranscript.trim()) {
-              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-              pendingInterimRef.current = '';
-              setInterimTranscript('');
-              handleUserMessage(finalTranscript.trim());
-            } else if (interimText.trim()) {
-              const cleaned = interimText.trim();
-              setInterimTranscript(cleaned);
-              pendingInterimRef.current = cleaned;
+            if (isHandsFreeMode) {
+              if (finalTranscript.trim()) {
+                if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                pendingInterimRef.current = '';
+                setInterimTranscript('');
+                handleUserMessage(finalTranscript.trim());
+              } else if (interimText.trim()) {
+                const cleaned = interimText.trim();
+                setInterimTranscript(cleaned);
+                pendingInterimRef.current = cleaned;
 
-              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-              silenceTimerRef.current = setTimeout(() => {
-                if (pendingInterimRef.current && pendingInterimRef.current.length >= 2) {
-                  const textToSend = pendingInterimRef.current;
-                  pendingInterimRef.current = '';
-                  setInterimTranscript('');
-                  handleUserMessage(textToSend);
-                }
-              }, 900);
+                if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                silenceTimerRef.current = setTimeout(() => {
+                  if (pendingInterimRef.current && pendingInterimRef.current.length >= 2) {
+                    const textToSend = pendingInterimRef.current;
+                    pendingInterimRef.current = '';
+                    setInterimTranscript('');
+                    handleUserMessage(textToSend);
+                  }
+                }, 900);
+              }
+            } else {
+              // Manual mode: display live transcript only
+              if (interimText.trim() || finalTranscript.trim()) {
+                setInterimTranscript((interimText || finalTranscript).trim());
+              }
             }
           };
 
@@ -256,7 +269,7 @@ export default function App() {
         } catch (e) {}
       }
     };
-  }, [isCallActive, isMicOn]);
+  }, [isCallActive, isMicOn, isHandsFreeMode, isLoadingAi, aiState]);
 
   // Handle direct audio recording with MediaRecorder (Push-to-talk / Direct Voice button)
   const startAudioRecording = async () => {
@@ -727,6 +740,8 @@ export default function App() {
           interimTranscript={interimTranscript}
           isRecordingAudio={isRecordingAudio}
           onToggleVoiceRecording={toggleVoiceRecording}
+          isHandsFreeMode={isHandsFreeMode}
+          onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
           inCallReminder={inCallReminder}
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onPostponeReminder={handlePostponeReminder}
@@ -747,6 +762,8 @@ export default function App() {
           onToggleVideo={() => setIsVideoOn(!isVideoOn)}
           isMutedAI={isMutedAI}
           onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+          isHandsFreeMode={isHandsFreeMode}
+          onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
           isTasksOpen={isTasksOpen}
           onToggleTasks={() => setIsTasksOpen(!isTasksOpen)}
           isChatOpen={isChatOpen}

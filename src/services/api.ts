@@ -308,54 +308,65 @@ export async function playAIVoice(text: string, customVoice?: string): Promise<v
 }
 
 // Fallback to Web Speech API
-function speakWithWebSpeech(text: string) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    return;
-  }
+function speakWithWebSpeech(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      resolve();
+      return;
+    }
 
-  try {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 1.0;
-    utterance.pitch = 1.05;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.05;
 
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(v => v.lang.includes('pt') || v.lang.includes('PT'));
-    if (ptVoice) utterance.voice = ptVoice;
+      const voices = window.speechSynthesis.getVoices();
+      const ptVoice = voices.find(v => v.lang.includes('pt') || v.lang.includes('PT'));
+      if (ptVoice) utterance.voice = ptVoice;
 
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    console.warn("Erro ao acionar síntese Web Speech:", err);
-  }
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("Erro ao acionar síntese Web Speech:", err);
+      resolve();
+    }
+  });
 }
 
 // Decodes PCM Base64 24kHz audio from Gemini TTS
-async function playPcmBase64(base64Data: string) {
-  try {
-    const binary = atob(base64Data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
+async function playPcmBase64(base64Data: string): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      const binary = atob(base64Data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const pcm16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        float32[i] = pcm16[i] / 32768.0;
+      }
+
+      const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+      buffer.getChannelData(0).set(float32);
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.onended = () => resolve();
+      source.start();
+    } catch (err) {
+      console.warn("Audio playback warn:", err);
+      resolve();
     }
-
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-    const pcm16 = new Int16Array(bytes.buffer);
-    const float32 = new Float32Array(pcm16.length);
-    for (let i = 0; i < pcm16.length; i++) {
-      float32[i] = pcm16[i] / 32768.0;
-    }
-
-    const buffer = audioCtx.createBuffer(1, float32.length, 24000);
-    buffer.getChannelData(0).set(float32);
-
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioCtx.destination);
-    source.start();
-  } catch (err) {
-    console.warn("Audio playback warn:", err);
-  }
+  });
 }
 
 

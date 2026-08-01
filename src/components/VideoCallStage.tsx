@@ -31,6 +31,8 @@ interface VideoCallStageProps {
   interimTranscript?: string;
   isRecordingAudio?: boolean;
   onToggleVoiceRecording?: () => void;
+  isHandsFreeMode?: boolean;
+  onToggleHandsFreeMode?: () => void;
   inCallReminder: InCallReminder | null;
   onUpdateTaskStatus: (taskId: string, status: 'PENDENTE' | 'A FAZER' | 'CONCLUIDO') => void;
   onPostponeReminder: (taskId: string) => void;
@@ -54,6 +56,8 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
   interimTranscript,
   isRecordingAudio,
   onToggleVoiceRecording,
+  isHandsFreeMode = true,
+  onToggleHandsFreeMode,
   inCallReminder,
   onUpdateTaskStatus,
   onPostponeReminder,
@@ -267,33 +271,56 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
               </div>
             )}
 
-            {/* Live User Speech Feedback Banner */}
-            {interimTranscript ? (
-              <div className="mt-3 px-4 py-1.5 bg-cyan-950/90 border border-cyan-500/60 rounded-full text-cyan-200 text-xs animate-pulse flex items-center gap-2 shadow-lg">
-                <Mic className="w-3.5 h-3.5 text-cyan-400 animate-bounce" />
-                <span>Ouvindo sua voz: "<strong>{interimTranscript}</strong>"</span>
-              </div>
-            ) : (
-              <div className="mt-3 px-3 py-1 bg-emerald-950/60 border border-emerald-500/40 rounded-full text-emerald-300 text-[11px] flex items-center gap-1.5 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Modo Mãos Livres Ativo (Pode falar diretamente sem clicar)</span>
-              </div>
-            )}
+            {/* Live User Speech Feedback & Hands-Free Mode Banner */}
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {interimTranscript ? (
+                <div className="px-4 py-1.5 bg-cyan-950/90 border border-cyan-500/60 rounded-full text-cyan-200 text-xs animate-pulse flex items-center gap-2 shadow-lg">
+                  <Mic className="w-3.5 h-3.5 text-cyan-400 animate-bounce" />
+                  <span>Ouvindo você: "<strong>{interimTranscript}</strong>"</span>
+                </div>
+              ) : isHandsFreeMode ? (
+                <div className="px-3 py-1 bg-emerald-950/70 border border-emerald-500/50 rounded-full text-emerald-300 text-[11px] flex items-center gap-2 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Modo Mãos Livres Ativo (Fale livremente sem clicar)</span>
+                </div>
+              ) : (
+                <div className="px-3 py-1 bg-slate-800/80 border border-slate-600/50 rounded-full text-slate-300 text-[11px] flex items-center gap-2">
+                  <MicOff className="w-3 h-3 text-slate-400" />
+                  <span>Modo Mãos Livres Desativado</span>
+                </div>
+              )}
+
+              {/* Mode Toggle Button */}
+              {onToggleHandsFreeMode && (
+                <button
+                  onClick={onToggleHandsFreeMode}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1.5 ${
+                    isHandsFreeMode
+                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 hover:bg-emerald-500/30'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500 border border-indigo-400/50 shadow-md'
+                  }`}
+                  title="Alternar entre Conversa Contínua Hands-Free e Envio por Botão"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>{isHandsFreeMode ? '🟢 Mãos Livres ON (Clique p/ desativar)' : '⚡ ATIVAR Conversa Contínua Mãos Livres'}</span>
+                </button>
+              )}
+            </div>
 
             {/* Direct Voice Input Button (Push-to-Talk / Click to Speak option) */}
             {onToggleVoiceRecording && (
-              <div className="mt-3 flex items-center gap-3">
+              <div className="mt-2 flex items-center gap-3">
                 <button
                   onClick={onToggleVoiceRecording}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-lg ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-lg ${
                     isRecordingAudio
                       ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse border border-red-400'
-                      : 'bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/40 text-indigo-200 hover:text-white'
+                      : 'bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white'
                   }`}
                   title="Clique para gravar e enviar um áudio direto para a IA"
                 >
-                  <Mic className={`w-4 h-4 ${isRecordingAudio ? 'text-white' : 'text-indigo-300'}`} />
-                  <span>{isRecordingAudio ? '🔴 Gravando Voz... (Clique para Concluir)' : '🎤 Ou Clique para Enviar Áudio Gravado'}</span>
+                  <Mic className={`w-3.5 h-3.5 ${isRecordingAudio ? 'text-white' : 'text-indigo-300'}`} />
+                  <span>{isRecordingAudio ? '🔴 Gravando Voz... (Clique p/ Concluir)' : '🎤 Gravar & Enviar Áudio'}</span>
                 </button>
               </div>
             )}
