@@ -28,6 +28,9 @@ interface VideoCallStageProps {
   onToggleVideo: () => void;
   aiState: 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'ALERT';
   latestAiText: string;
+  interimTranscript?: string;
+  isRecordingAudio?: boolean;
+  onToggleVoiceRecording?: () => void;
   inCallReminder: InCallReminder | null;
   onUpdateTaskStatus: (taskId: string, status: 'PENDENTE' | 'A FAZER' | 'CONCLUIDO') => void;
   onPostponeReminder: (taskId: string) => void;
@@ -48,6 +51,9 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
   onToggleVideo,
   aiState,
   latestAiText,
+  interimTranscript,
+  isRecordingAudio,
+  onToggleVoiceRecording,
   inCallReminder,
   onUpdateTaskStatus,
   onPostponeReminder,
@@ -253,11 +259,37 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
 
             {/* AI Voice Subtitles */}
             {latestAiText && (
-              <div className="mt-8 text-center max-w-xl px-4">
-                <p className="text-indigo-300 text-xs font-bold uppercase tracking-[0.2em] mb-2">IA Conselheira</p>
-                <h1 className="text-lg md:text-xl text-white font-light leading-relaxed">
+              <div className="mt-6 text-center max-w-xl px-4">
+                <p className="text-indigo-300 text-xs font-bold uppercase tracking-[0.2em] mb-1">IA Conselheira</p>
+                <h1 className="text-base md:text-lg text-white font-light leading-relaxed">
                   "{latestAiText}"
                 </h1>
+              </div>
+            )}
+
+            {/* Live User Speech Feedback Banner */}
+            {interimTranscript && (
+              <div className="mt-3 px-4 py-1.5 bg-cyan-950/80 border border-cyan-500/50 rounded-full text-cyan-200 text-xs animate-pulse flex items-center gap-2">
+                <Mic className="w-3.5 h-3.5 text-cyan-400 animate-bounce" />
+                <span>Ouvindo você: "<strong>{interimTranscript}</strong>"</span>
+              </div>
+            )}
+
+            {/* Direct Voice Input Button (Push-to-Talk / Click to Speak fallback) */}
+            {onToggleVoiceRecording && (
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={onToggleVoiceRecording}
+                  className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-lg ${
+                    isRecordingAudio
+                      ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse border border-red-400'
+                      : 'bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/40 text-indigo-200'
+                  }`}
+                  title="Clique para falar e enviar áudio direto para a IA"
+                >
+                  <Mic className={`w-4 h-4 ${isRecordingAudio ? 'text-white' : 'text-indigo-300'}`} />
+                  <span>{isRecordingAudio ? '🔴 Gravando Voz... (Clique para Concluir)' : '🎤 Clique para Falar com IA'}</span>
+                </button>
               </div>
             )}
           </div>

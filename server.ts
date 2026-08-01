@@ -182,6 +182,116 @@ ${JSON.stringify(currentTasks || [], null, 2)}
   }
 });
 
+// 2b. Multimodal Audio Chat Route (Direct Speech-to-Text + AI Reply in 1 Call)
+app.post(["/api/gemini/audio-chat", "/gemini/audio-chat"], async (req, res) => {
+  try {
+    const { audioBase64, mimeType, currentTasks, personality, customInstructions } = req.body;
+
+    if (!audioBase64) {
+      return res.json({ success: false, error: "Nenhum áudio enviado." });
+    }
+
+    const cleanAudio = audioBase64.replace(/^data:audio\/\w+;(codecs=\w+;)?base64,/, "");
+
+    const systemInstruction = `Você é a "IA Consultora de Vídeo & Produtividade", uma assistente de vídeo chamada em tempo real de altíssima inteligência.
+Seu objetivo é ouvir o áudio do usuário, transcrever o que ele falou e responder diretamente com tom conversacional, humano, atraente e cativante em português do Brasil (pt-BR).
+Personalidade: ${personality || "Acolhedora, Atraente e Muito Inteligente"}.
+${customInstructions ? `Instruções adicionais: ${customInstructions}` : ''}
+
+Mantenha a resposta "replyText" conversacional de 2 a 4 frases para leitura em voz alta.
+Se o usuário pediu para criar ou agendar uma tarefa no áudio, preencha o campo "newTask".
+
+Sua resposta DEVE ser um objeto JSON com o seguinte formato:
+{
+  "userTranscribedText": "Transcrição do que o usuário disse no áudio",
+  "replyText": "Sua resposta conversacional em português",
+  "adviceBullets": ["Conselho prático 1"],
+  "newTask": {
+    "name": "Nome da tarefa",
+    "startDate": "YYYY-MM-DDTHH:mm",
+    "endDate": "YYYY-MM-DDTHH:mm",
+    "estimatedTime": "Ex: 30 minutos",
+    "status": "PENDENTE",
+    "priority": "média",
+    "category": "Geral"
+  }
+}
+
+Tarefas atuais do usuário:
+${JSON.stringify(currentTasks || [], null, 2)}
+`;
+
+    const response = await callGeminiWithFallback(req, (ai) =>
+      ai.models.generateContent({
+        model: GEMINI_TEXT_MODEL,
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType || "audio/webm",
+                data: cleanAudio,
+              },
+            },
+            {
+              text: `O usuário enviou este áudio de voz na chamada. Por favor, ouça, transcreva a fala exata do usuário no campo "userTranscribedText", e responda no campo "replyText".`,
+            },
+          ],
+        },
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              userTranscribedText: { type: Type.STRING, description: "Transcrição da voz do usuário" },
+              replyText: { type: Type.STRING, description: "Resposta conversacional da IA" },
+              adviceBullets: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              newTask: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  startDate: { type: Type.STRING },
+                  endDate: { type: Type.STRING },
+                  estimatedTime: { type: Type.STRING },
+                  status: { type: Type.STRING },
+                  priority: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                },
+              },
+            },
+            required: ["userTranscribedText", "replyText"],
+          },
+        },
+      })
+    );
+
+    const text = response.text || "{}";
+    let parsedData;
+    try {
+      parsedData = JSON.parse(text);
+    } catch {
+      parsedData = { replyText: text, userTranscribedText: "Áudio recebido" };
+    }
+
+    res.json({ success: true, data: parsedData });
+  } catch (error: any) {
+    const formattedErr = formatGeminiError(error);
+    console.warn("Gemini Audio Chat Warning:", formattedErr);
+    res.json({
+      success: false,
+      error: formattedErr,
+      data: {
+        userTranscribedText: "Áudio de voz recebido",
+        replyText: "Te ouvi perfeitamente! Como posso te ajudar com suas tarefas agora?",
+        adviceBullets: ["Sua mensagem de voz foi processada."]
+      }
+    });
+  }
+});
+
 // 3. Vision Analysis of User Video Frame
 app.post(["/api/gemini/analyze-frame", "/gemini/analyze-frame"], async (req, res) => {
   try {

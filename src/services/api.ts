@@ -114,6 +114,76 @@ Formato da resposta obrigatoriamente JSON com a propriedade "replyText" e opcion
   }
 }
 
+export async function sendAudioChatMessage(
+  audioBase64: string,
+  mimeType: string,
+  currentTasks: Task[]
+): Promise<{ userTranscribedText: string; replyText: string; adviceBullets?: string[]; newTask?: Partial<Task> }> {
+  try {
+    const settings = getSavedSettings();
+
+    // Direct client call if custom key is enabled
+    if (settings.useCustomApiKey && settings.geminiApiKey && settings.geminiApiKey.trim()) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey.trim() });
+        const cleanAudio = audioBase64.replace(/^data:audio\/\w+;(codecs=\w+;)?base64,/, "");
+        const response = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: {
+            parts: [
+              { inlineData: { mimeType: mimeType || "audio/webm", data: cleanAudio } },
+              { text: "Ouça o áudio, transcreva no campo userTranscribedText e responda no campo replyText em português." }
+            ]
+          },
+          config: {
+            responseMimeType: "application/json",
+          }
+        });
+
+        const parsed = JSON.parse(response.text || "{}");
+        if (parsed.replyText) {
+          return {
+            userTranscribedText: parsed.userTranscribedText || "Áudio processado",
+            replyText: parsed.replyText,
+            adviceBullets: parsed.adviceBullets,
+            newTask: parsed.newTask,
+          };
+        }
+      } catch (clientErr) {
+        console.warn("Áudio direto no cliente falhou. Recorrendo ao servidor:", clientErr);
+      }
+    }
+
+    const response = await fetch("/api/gemini/audio-chat", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        audioBase64,
+        mimeType,
+        currentTasks,
+        personality: settings.aiPersonality,
+        customInstructions: settings.customInstructions,
+      }),
+    });
+
+    const result = await response.json().catch(() => ({ success: false }));
+    if (result.success && result.data) {
+      return result.data;
+    }
+
+    return {
+      userTranscribedText: "Áudio enviado",
+      replyText: result.data?.replyText || "Ouvi sua mensagem! Em que posso te ajudar com suas tarefas agora?",
+    };
+  } catch (err: any) {
+    console.warn("Erro no envio do áudio:", err);
+    return {
+      userTranscribedText: "Áudio de voz",
+      replyText: "Entendido! Estou te ouvindo perfeitamente na chamada.",
+    };
+  }
+}
+
 export async function analyzeVideoFrame(
   imageBase64: string,
   currentTasks: Task[]

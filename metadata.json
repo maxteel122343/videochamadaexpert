@@ -1,5 +1,5 @@
 {
-  "name": "Remix IA Videochamada \u0026 Tarefas Advisor",
+  "name": "Remix Remix IA Videochamada \u0026 Tarefas Advisor",
   "description": "Videochamada em tempo real com IA inteligente via WebRTC/áudio/vídeo, conselhos de produtividade, criação automática de tarefas e lembretes proativos diretamente na chamada.",
   "requestFramePermissions": [
     "camera",

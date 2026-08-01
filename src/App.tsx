@@ -8,7 +8,7 @@ import { AdviceModal } from './components/AdviceModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Task, TaskStatus, ChatMessage, InCallReminder, AppSettings } from './types';
 import { INITIAL_TASKS } from './data/initialTasks';
-import { sendChatMessage, analyzeVideoFrame, generateReminderVoice, playAIVoice, getSavedSettings } from './services/api';
+import { sendChatMessage, sendAudioChatMessage, analyzeVideoFrame, generateReminderVoice, playAIVoice, getSavedSettings } from './services/api';
 
 export default function App() {
   // Settings state
@@ -35,6 +35,9 @@ export default function App() {
 
   const [aiState, setAiState] = useState<'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'ALERT'>('IDLE');
   const [latestAiText, setLatestAiText] = useState<string>('');
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [isRecordingAudio, setIsRecordingAudio] = useState<boolean>(false);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-1',
@@ -53,6 +56,8 @@ export default function App() {
   const [isAnalyzingVision, setIsAnalyzingVision] = useState<boolean>(false);
 
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Save tasks to LocalStorage on change
   useEffect(() => {
@@ -142,52 +147,218 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isCallActive, tasks, inCallReminder, isMutedAI]);
 
-  // Handle Web Speech Recognition (Mic Voice Input during Call)
+  // Handle Web Speech Recognition (Mic Voice Input during Call with continuous auto-restart & live transcript)
   useEffect(() => {
-    if (isCallActive && isMicOn) {
+    let isStoppedIntentionally = false;
+
+    if (isCallActive && isMicOn && !isLoadingAi) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
           const recognition = new SpeechRecognition();
           recognition.continuous = true;
-          recognition.interimResults = false;
+          recognition.interimResults = true;
           recognition.lang = 'pt-BR';
 
+          recognition.onstart = () => {
+            setAiState((prev) => (prev === 'SPEAKING' ? 'SPEAKING' : 'LISTENING'));
+          };
+
           recognition.onresult = (event: any) => {
-            const lastResultIndex = event.results.length - 1;
-            const transcript = event.results[lastResultIndex][0].transcript.trim();
-            if (transcript) {
-              handleUserMessage(transcript);
+            let finalTranscript = '';
+            let interimText = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcriptChunk = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                finalTranscript += transcriptChunk;
+              } else {
+                interimText += transcriptChunk;
+              }
+            }
+
+            if (interimText.trim()) {
+              setInterimTranscript(interimText.trim());
+            }
+
+            if (finalTranscript.trim()) {
+              setInterimTranscript('');
+              handleUserMessage(finalTranscript.trim());
             }
           };
 
           recognition.onerror = (err: any) => {
-            console.warn('Speech recognition error:', err);
+            console.warn('Aviso de reconhecimento de voz:', err.error || err);
+            if (err.error === 'not-allowed') {
+              setInterimTranscript('Permissão do microfone negada no navegador.');
+            }
+          };
+
+          recognition.onend = () => {
+            if (!isStoppedIntentionally && isCallActive && isMicOn && !isLoadingAi) {
+              setTimeout(() => {
+                try {
+                  recognition.start();
+                } catch (e) {}
+              }, 300);
+            }
           };
 
           recognition.start();
           recognitionRef.current = recognition;
         } catch (err) {
-          console.warn('Speech recognition setup error:', err);
+          console.warn('Erro ao configurar reconhecimento de voz:', err);
         }
       }
     } else {
+      isStoppedIntentionally = true;
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
         recognitionRef.current = null;
       }
+      setInterimTranscript('');
     }
 
     return () => {
+      isStoppedIntentionally = true;
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch (e) {}
       }
     };
-  }, [isCallActive, isMicOn]);
+  }, [isCallActive, isMicOn, isLoadingAi]);
+
+  // Handle direct audio recording with MediaRecorder (Push-to-talk / Direct Voice button)
+  const startAudioRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach((track) => track.stop());
+
+        if (audioBlob.size < 500) {
+          console.warn('Áudio de voz muito curto ou vazio.');
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64Audio = reader.result as string;
+          await handleAudioMessage(base64Audio, 'audio/webm');
+        };
+      };
+
+      mediaRecorder.start(100);
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecordingAudio(true);
+      setAiState('LISTENING');
+    } catch (err) {
+      console.error('Erro ao acessar microfone:', err);
+      alert('Não foi possível acionar o microfone. Verifique as permissões do seu navegador.');
+    }
+  };
+
+  const stopAudioRecording = () => {
+    if (mediaRecorderRef.current && isRecordingAudio) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+      mediaRecorderRef.current = null;
+    }
+  };
+
+  const toggleVoiceRecording = () => {
+    if (isRecordingAudio) {
+      stopAudioRecording();
+    } else {
+      startAudioRecording();
+    }
+  };
+
+  // Process Direct Audio Voice Message with Gemini Multimodal API
+  const handleAudioMessage = async (audioBase64: string, mimeType: string) => {
+    setIsLoadingAi(true);
+    setAiState('THINKING');
+
+    try {
+      const result = await sendAudioChatMessage(audioBase64, mimeType, tasks);
+
+      const userText = result.userTranscribedText || 'Áudio enviado na chamada';
+      const aiReply = result.replyText || 'Te ouvi perfeitamente! Como posso te ajudar com suas tarefas agora?';
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}`,
+          sender: 'user',
+          text: `🎤 [Voz] ${userText}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+
+      setLatestAiText(aiReply);
+      setAiState('SPEAKING');
+
+      let createdTask: Task | undefined = undefined;
+
+      if (result.newTask && result.newTask.name) {
+        const now = new Date();
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const defaultStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const endObj = new Date(now.getTime() + 60 * 60 * 1000);
+        const defaultEnd = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
+
+        const taskToAdd: Task = {
+          id: `task-${Date.now()}`,
+          name: result.newTask.name,
+          startDate: result.newTask.startDate || defaultStart,
+          endDate: result.newTask.endDate || defaultEnd,
+          estimatedTime: result.newTask.estimatedTime || '30 minutos',
+          status: (result.newTask.status as TaskStatus) || 'PENDENTE',
+          priority: (result.newTask.priority as any) || 'média',
+          category: result.newTask.category || 'Geral',
+          createdAt: new Date().toISOString(),
+        };
+
+        setTasks((prev) => [taskToAdd, ...prev]);
+        createdTask = taskToAdd;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `ai-msg-${Date.now()}`,
+          sender: 'ai',
+          text: aiReply,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          taskCreated: createdTask,
+        },
+      ]);
+
+      if (!isMutedAI) {
+        await playAIVoice(aiReply);
+      }
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsLoadingAi(false);
+      setTimeout(() => {
+        setAiState('LISTENING');
+      }, 3000);
+    }
+  };
 
   // Main User Query Handler (Calls Gemini Backend Chat API)
   const handleUserMessage = async (text: string) => {
@@ -458,6 +629,9 @@ export default function App() {
           onToggleVideo={() => setIsVideoOn(!isVideoOn)}
           aiState={aiState}
           latestAiText={latestAiText}
+          interimTranscript={interimTranscript}
+          isRecordingAudio={isRecordingAudio}
+          onToggleVoiceRecording={toggleVoiceRecording}
           inCallReminder={inCallReminder}
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onPostponeReminder={handlePostponeReminder}
