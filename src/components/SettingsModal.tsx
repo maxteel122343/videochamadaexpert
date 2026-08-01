@@ -66,7 +66,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = { success: false, error: 'O servidor não retornou um JSON válido. Certifique-se de usar uma chave do Google AI Studio (iniciando com "AIzaSy...").' };
+      }
+
       if (data.success && data.data?.replyText) {
         setTestStatus('success');
         setTestMessage(`✓ Conexão bem-sucedida! Gemini respondeu: "${data.data.replyText.slice(0, 60)}..."`);

@@ -2,8 +2,6 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
-import AdmZip from "adm-zip";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 const app = express();
@@ -291,10 +289,12 @@ app.post("/api/gemini/reminder-voice", async (req, res) => {
 });
 
 // 6. Download Full Project as ZIP
-app.get("/api/download-zip", (req, res) => {
+app.get("/api/download-zip", async (req, res) => {
   let tmpPath = "";
   try {
-    const zip = new AdmZip();
+    const AdmZipModule = await import("adm-zip");
+    const AdmZipClass: any = AdmZipModule.default || AdmZipModule;
+    const zip = new AdmZipClass();
     const rootDir = process.cwd();
 
     zip.addLocalFolder(rootDir, "", (filename) => {
@@ -333,10 +333,23 @@ app.get("/api/download-zip", (req, res) => {
   }
 });
 
+// Global Express Error Handler to prevent 500 HTML responses on Vercel
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("Global Express Error Handler:", err);
+  if (!res.headersSent) {
+    res.status(200).json({
+      success: false,
+      error: err?.message || "Erro interno no servidor",
+      message: "Recursos locais continuam ativos."
+    });
+  }
+});
+
 // Serve frontend with Vite locally (only if not running on Vercel serverless)
 if (!process.env.VERCEL) {
   async function startServer() {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
