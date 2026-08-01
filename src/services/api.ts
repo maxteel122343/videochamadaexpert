@@ -119,7 +119,7 @@ export async function generateReminderVoice(
   }
 }
 
-// Audio Speech Handler (Calls Gemini TTS with user selected voice)
+// Audio Speech Handler (Calls Gemini TTS with user selected voice or falls back gracefully)
 export async function playAIVoice(text: string, customVoice?: string): Promise<void> {
   const settings = getSavedSettings();
   const selectedVoice = customVoice || settings.ttsVoice || "Kore";
@@ -133,29 +133,35 @@ export async function playAIVoice(text: string, customVoice?: string): Promise<v
         voiceName: selectedVoice,
       }),
     });
-    const data = await response.json();
 
-    if (data.success && data.audioBase64) {
-      await playPcmBase64(data.audioBase64);
-      return;
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.audioBase64) {
+        await playPcmBase64(data.audioBase64);
+        return;
+      }
     }
   } catch (err) {
-    console.warn("Falha no Gemini TTS, ativando síntese local do navegador:", err);
+    console.warn("Falha de conexão com Gemini TTS, ativando síntese local do navegador...", err);
   }
 
   // Fallback to Web Speech API if Audio Context or network fails
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pt-BR';
-    utterance.rate = 1.0;
-    utterance.pitch = 1.05;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'pt-BR';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.05;
 
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(v => v.lang.includes('pt') || v.lang.includes('PT'));
-    if (ptVoice) utterance.voice = ptVoice;
+      const voices = window.speechSynthesis.getVoices();
+      const ptVoice = voices.find(v => v.lang.includes('pt') || v.lang.includes('PT'));
+      if (ptVoice) utterance.voice = ptVoice;
 
-    window.speechSynthesis.speak(utterance);
+      window.speechSynthesis.speak(utterance);
+    } catch (synthErr) {
+      console.error("Erro na síntese de voz local do navegador:", synthErr);
+    }
   }
 }
 

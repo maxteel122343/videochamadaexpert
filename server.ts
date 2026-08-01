@@ -199,6 +199,15 @@ app.post("/api/gemini/speak", async (req, res) => {
       return res.status(400).json({ success: false, error: "Texto é obrigatório" });
     }
 
+    const customKey = (req?.headers["x-gemini-api-key"] as string) || req?.body?.apiKey;
+    const envKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY"
+      ? process.env.GEMINI_API_KEY
+      : "";
+
+    if (!customKey && !envKey) {
+      return res.json({ success: false, message: "Síntese nativa do navegador ativada (Sem chave de API configurada no servidor)" });
+    }
+
     const chosenVoice = voiceName || "Kore"; // Kore, Aoede, Fenrir, Puck, Charon
 
     const response = await callGeminiWithFallback(req, (ai) =>
@@ -224,7 +233,7 @@ app.post("/api/gemini/speak", async (req, res) => {
   } catch (error: any) {
     console.warn("Gemini TTS Warning:", error?.message || error);
     // Return non-500 graceful status so frontend seamlessly uses Web Speech API synthesis without crashing
-    res.json({ success: false, message: "Síntese nativa do navegador ativada", error: error.message });
+    return res.json({ success: false, message: "Síntese nativa do navegador ativada", error: error?.message });
   }
 });
 
