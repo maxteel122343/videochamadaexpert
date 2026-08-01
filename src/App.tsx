@@ -58,6 +58,8 @@ export default function App() {
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const silenceTimerRef = useRef<any>(null);
+  const pendingInterimRef = useRef<string>('');
 
   // Save tasks to LocalStorage on change
   useEffect(() => {
@@ -177,13 +179,25 @@ export default function App() {
               }
             }
 
-            if (interimText.trim()) {
-              setInterimTranscript(interimText.trim());
-            }
-
             if (finalTranscript.trim()) {
+              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+              pendingInterimRef.current = '';
               setInterimTranscript('');
               handleUserMessage(finalTranscript.trim());
+            } else if (interimText.trim()) {
+              const cleaned = interimText.trim();
+              setInterimTranscript(cleaned);
+              pendingInterimRef.current = cleaned;
+
+              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+              silenceTimerRef.current = setTimeout(() => {
+                if (pendingInterimRef.current && pendingInterimRef.current.length > 2) {
+                  const textToSend = pendingInterimRef.current;
+                  pendingInterimRef.current = '';
+                  setInterimTranscript('');
+                  handleUserMessage(textToSend);
+                }
+              }, 1200);
             }
           };
 

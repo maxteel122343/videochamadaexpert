@@ -268,27 +268,32 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
             )}
 
             {/* Live User Speech Feedback Banner */}
-            {interimTranscript && (
-              <div className="mt-3 px-4 py-1.5 bg-cyan-950/80 border border-cyan-500/50 rounded-full text-cyan-200 text-xs animate-pulse flex items-center gap-2">
+            {interimTranscript ? (
+              <div className="mt-3 px-4 py-1.5 bg-cyan-950/90 border border-cyan-500/60 rounded-full text-cyan-200 text-xs animate-pulse flex items-center gap-2 shadow-lg">
                 <Mic className="w-3.5 h-3.5 text-cyan-400 animate-bounce" />
-                <span>Ouvindo você: "<strong>{interimTranscript}</strong>"</span>
+                <span>Ouvindo sua voz: "<strong>{interimTranscript}</strong>"</span>
+              </div>
+            ) : (
+              <div className="mt-3 px-3 py-1 bg-emerald-950/60 border border-emerald-500/40 rounded-full text-emerald-300 text-[11px] flex items-center gap-1.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>Modo Mãos Livres Ativo (Pode falar diretamente sem clicar)</span>
               </div>
             )}
 
-            {/* Direct Voice Input Button (Push-to-Talk / Click to Speak fallback) */}
+            {/* Direct Voice Input Button (Push-to-Talk / Click to Speak option) */}
             {onToggleVoiceRecording && (
-              <div className="mt-4 flex items-center gap-3">
+              <div className="mt-3 flex items-center gap-3">
                 <button
                   onClick={onToggleVoiceRecording}
                   className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all shadow-lg ${
                     isRecordingAudio
                       ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse border border-red-400'
-                      : 'bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/40 text-indigo-200'
+                      : 'bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/40 text-indigo-200 hover:text-white'
                   }`}
-                  title="Clique para falar e enviar áudio direto para a IA"
+                  title="Clique para gravar e enviar um áudio direto para a IA"
                 >
                   <Mic className={`w-4 h-4 ${isRecordingAudio ? 'text-white' : 'text-indigo-300'}`} />
-                  <span>{isRecordingAudio ? '🔴 Gravando Voz... (Clique para Concluir)' : '🎤 Clique para Falar com IA'}</span>
+                  <span>{isRecordingAudio ? '🔴 Gravando Voz... (Clique para Concluir)' : '🎤 Ou Clique para Enviar Áudio Gravado'}</span>
                 </button>
               </div>
             )}
