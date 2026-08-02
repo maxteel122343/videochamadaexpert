@@ -13,12 +13,15 @@ app.use(express.json({ limit: "25mb" }));
 const GEMINI_TEXT_MODEL = "gemini-3.6-flash";
 const GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
 
+// Default fallback key
+const DEFAULT_KEY = "AQ.Ab8RN6LQI_k-dZOrvRJk_7mXFiSyKvPZZ17WmpYrU9kG5vs-1w";
+
 // Helper to clean up raw JSON errors from Gemini API
 function formatGeminiError(error: any): string {
   if (!error) return "Erro desconhecido na API do Gemini";
   const msg = typeof error === "string" ? error : error.message || JSON.stringify(error);
   if (msg.includes("401") || msg.includes("UNAUTHENTICATED") || msg.includes("invalid authentication credentials")) {
-    return "Chave de API do Gemini inválida ou não autorizada (Erro 401). Forneça uma chave válida do Google AI Studio nas Configurações do app.";
+    return "Chave de API do Gemini inválida ou não autorizada (Erro 401). Forneça uma chave válida do Google AI Studio (iniciando com 'AIzaSy...') nas Configurações do app.";
   }
   try {
     const parsed = JSON.parse(msg);
@@ -37,7 +40,7 @@ async function callGeminiWithFallback<T>(
   const customKey = (req?.headers["x-gemini-api-key"] as string) || req?.body?.apiKey;
   const envKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== "YOUR_GEMINI_API_KEY"
     ? process.env.GEMINI_API_KEY.trim()
-    : "";
+    : DEFAULT_KEY;
 
   // 1. Try Custom Header Key if provided by user
   if (customKey && customKey.trim()) {
@@ -53,7 +56,7 @@ async function callGeminiWithFallback<T>(
       return await actionFn(customAI);
     } catch (customErr: any) {
       console.warn("⚠️ Chave customizada enviada pelo cliente falhou. Tentando chave .env...", customErr?.message || customErr);
-      if (!envKey) {
+      if (!envKey || envKey === DEFAULT_KEY) {
         throw customErr;
       }
     }
@@ -72,7 +75,7 @@ async function callGeminiWithFallback<T>(
     return await actionFn(fallbackAI);
   }
 
-  throw new Error("Nenhuma chave de API do Gemini válida encontrada. Configure sua chave nas Configurações do app.");
+  throw new Error("Nenhuma chave de API do Gemini válida configurada no .env da Vercel ou enviada pelo usuário.");
 }
 
 // API Routes
