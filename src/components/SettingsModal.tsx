@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check, Copy } from 'lucide-react';
+import { X, Key, Volume2, VolumeX, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check, Copy } from 'lucide-react';
 import { AppSettings } from '../types';
 import { DEFAULT_GEMINI_KEY_1, DEFAULT_GEMINI_KEY_2, DEFAULT_GEMINI_KEY_3, playAIVoice } from '../services/api';
 
@@ -31,6 +31,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       : DEFAULT_GEMINI_KEY_1
   );
   const [ttsVoice, setTtsVoice] = useState<string>(settings.ttsVoice || 'Kore');
+  const [disableTtsVoice, setDisableTtsVoice] = useState<boolean>(settings.disableTtsVoice ?? true);
   const [aiPersonality, setAiPersonality] = useState<string>(settings.aiPersonality || 'Acolhedora, Inteligente e Atraente');
   const [autoStartCall, setAutoStartCall] = useState<boolean>(settings.autoStartCall ?? false);
   const [showTopHeader, setShowTopHeader] = useState<boolean>(settings.showTopHeader ?? false);
@@ -70,7 +71,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       geminiApiKey: geminiApiKey.trim() || DEFAULT_GEMINI_KEY_1,
       ttsVoice,
       aiPersonality,
-      autoSpeak: true,
+      autoSpeak: !disableTtsVoice,
+      disableTtsVoice,
       autoStartCall,
       showTopHeader,
       customInstructions: customInstructions.trim(),
@@ -513,13 +515,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
           </div>
 
-          {/* Voice Selection */}
-          <div className="space-y-2">
-            <label className="font-bold text-slate-900 flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-emerald-600" />
-              <span>Voz Atraente da IA para Videochamada</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Voice Selection & Loop Control */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <label className="font-bold text-slate-900 flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-emerald-600" />
+                <span>Voz Sintética da IA para Videochamada</span>
+              </label>
+            </div>
+
+            {/* TOGGLE TO DISABLE SYNTHETIC VOICE (LOOP PREVENTION) */}
+            <div className={`p-3.5 rounded-xl border transition flex items-center justify-between gap-3 ${
+              disableTtsVoice
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                : 'bg-emerald-50/60 border-emerald-200 text-slate-800'
+            }`}>
+              <div className="flex items-start gap-2.5">
+                {disableTtsVoice ? (
+                  <VolumeX className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="font-bold text-xs sm:text-sm flex items-center gap-2">
+                    <span>{disableTtsVoice ? 'Voz Sintética DESATIVADA (Apenas Texto)' : 'Voz Sintética ATIVADA (Áudio em Tempo Real)'}</span>
+                    {disableTtsVoice && (
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold uppercase">
+                        Modo Sem Loop
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                    Desative a reprodução de voz caso seu microfone capture o som do alto-falante e cause eco/looping. A resposta continuará aparecendo no chat de transcrição.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDisableTtsVoice(!disableTtsVoice)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  disableTtsVoice ? 'bg-amber-500' : 'bg-emerald-600'
+                }`}
+                role="switch"
+                aria-checked={disableTtsVoice}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    disableTtsVoice ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${disableTtsVoice ? 'opacity-50 pointer-events-none' : ''}`}>
               {[
                 { id: 'Kore', name: 'Kore', desc: 'Feminina Acolhedora, Fluida e Atraente' },
                 { id: 'Aoede', name: 'Aoede', desc: 'Feminina Expressiva e Vibrante' },

@@ -51,6 +51,7 @@ export interface AppSettings {
   ttsVoice: string;
   aiPersonality: string;
   autoSpeak: boolean;
+  disableTtsVoice?: boolean;
   autoStartCall?: boolean;
   showTopHeader?: boolean;
   customInstructions?: string;

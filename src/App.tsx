@@ -882,6 +882,9 @@ export default function App() {
   const handleStartCall = () => {
     setIsCallActive(true);
     setAiState('LISTENING');
+    if (vadAudioCtxRef.current && vadAudioCtxRef.current.state === 'suspended') {
+      vadAudioCtxRef.current.resume().catch(() => {});
+    }
     const greeting = 'Olá! Estou online na sua videochamada WebRTC. Como posso ajudar com conselhos ou organizar suas tarefas hoje?';
     setLatestAiText(greeting);
     if (!isMutedAI) {
@@ -897,7 +900,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white pb-16 md:pb-0">
+    <div className="h-[100dvh] w-full bg-slate-50 text-slate-900 flex flex-col overflow-hidden font-sans selection:bg-indigo-500 selection:text-white">
       {/* HEADER */}
       <Header
         isCallActive={isCallActive}
@@ -923,7 +926,7 @@ export default function App() {
       />
 
       {/* DESKTOP SIDEBAR + MAIN CONTENT CONTAINER (md:flex) */}
-      <div className="hidden md:flex flex-1 overflow-hidden min-h-[calc(100vh-64px)]">
+      <div className="hidden md:flex flex-1 overflow-hidden min-h-0">
         {/* LEFT PC SIDEBAR */}
         <DesktopSidebar
           activeTab={desktopTab}
@@ -937,10 +940,10 @@ export default function App() {
         />
 
         {/* MAIN DESKTOP CONTENT */}
-        <main className="flex-1 p-4 max-w-7xl w-full mx-auto flex flex-col gap-4 overflow-y-auto">
+        <main className="flex-1 p-3 md:p-4 max-w-7xl w-full mx-auto flex flex-col gap-4 overflow-hidden h-full">
           {/* 1. HORIZONTAL SPLIT VIEW FOR CHAMADA (LEFT CAMERA / STAGE, RIGHT AI CHAT) */}
           {desktopTab === 'call' && (
-            <div className={`grid gap-4 h-[calc(100vh-100px)] ${isChatOpen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+            <div className={`grid gap-4 h-full overflow-hidden ${isChatOpen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
               {/* Left Column: User Camera & Video Call Stage */}
               <div className="flex flex-col gap-3 h-full overflow-hidden">
                 <div className="flex-1 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
@@ -1019,7 +1022,7 @@ export default function App() {
 
           {/* 2. EXCLUSIVE AI CHAT VIEW */}
           {desktopTab === 'chat' && (
-            <div className="h-[calc(100vh-100px)] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+            <div className="h-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
               <ChatDrawer
                 messages={messages}
                 onSendMessage={handleUserMessage}
@@ -1031,7 +1034,7 @@ export default function App() {
 
           {/* 3. EXCLUSIVE CARDS & TASKS VIEW */}
           {desktopTab === 'tasks' && (
-            <div className="h-[calc(100vh-100px)] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+            <div className="h-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
               <TaskManager
                 tasks={tasks}
                 onAddTask={handleAddTask}
@@ -1049,9 +1052,9 @@ export default function App() {
       </div>
 
       {/* MOBILE RESPONSIVE LAYOUT (md:hidden) */}
-      <main className="md:hidden flex-1 p-2 flex flex-col overflow-hidden">
+      <main className="md:hidden flex-1 min-h-0 p-2 pb-16 flex flex-col overflow-hidden h-full">
         {activeMobileTab === 'call' && (
-          <div className="flex flex-col h-[calc(100dvh-64px)] overflow-hidden gap-2 pb-12">
+          <div className="flex flex-col h-full overflow-hidden gap-2">
             {/* Top Section: User Camera / Video Stage */}
             <div className="flex-1 min-h-0 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900 flex flex-col">
               <VideoCallStage
@@ -1130,7 +1133,7 @@ export default function App() {
         )}
 
         {activeMobileTab === 'chat' && (
-          <div className="h-[calc(100vh-130px)] rounded-2xl overflow-hidden shadow-md border border-slate-200">
+          <div className="h-full rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-white">
             <ChatDrawer
               messages={messages}
               onSendMessage={handleUserMessage}
@@ -1141,7 +1144,7 @@ export default function App() {
         )}
 
         {activeMobileTab === 'tasks' && (
-          <div className="h-[calc(100vh-130px)] rounded-2xl overflow-hidden shadow-md border border-slate-200">
+          <div className="h-full rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-white">
             <TaskManager
               tasks={tasks}
               onAddTask={handleAddTask}

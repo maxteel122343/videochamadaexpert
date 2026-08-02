@@ -44,7 +44,8 @@ export function getSavedSettings(): AppSettings {
         selectedPresetKey: parsed.selectedPresetKey || 'key1',
         ttsVoice: parsed.ttsVoice || "Kore",
         aiPersonality: parsed.aiPersonality || "Acolhedora, Inteligente e Atraente",
-        autoSpeak: parsed.autoSpeak ?? true,
+        autoSpeak: parsed.autoSpeak ?? false,
+        disableTtsVoice: parsed.disableTtsVoice ?? true,
         autoStartCall: parsed.autoStartCall ?? false,
         showTopHeader: parsed.showTopHeader ?? false,
         customInstructions: parsed.customInstructions || '',
@@ -59,7 +60,8 @@ export function getSavedSettings(): AppSettings {
     selectedPresetKey: 'key1',
     ttsVoice: "Kore", // Kore, Aoede, Fenrir, Puck, Charon
     aiPersonality: "Acolhedora, Inteligente e Atraente",
-    autoSpeak: true,
+    autoSpeak: false,
+    disableTtsVoice: true,
     autoStartCall: false,
     showTopHeader: false,
     customInstructions: "",
@@ -316,11 +318,18 @@ export function getIsAITalking(): boolean {
 
 // Resilient Audio Speech Handler with Gemini TTS + Client Direct Call + Seamless Web Speech API
 export async function playAIVoice(text: string, customVoice?: string): Promise<void> {
+  const settings = getSavedSettings();
+
+  // Se a voz sintética estiver desativada ou autoSpeak desabilitado (e não for um teste manual de voz)
+  if (!customVoice && (settings.disableTtsVoice || !settings.autoSpeak)) {
+    console.log("Voz sintética / Fala automática desativada (Prevenção de Loop de Áudio).");
+    return;
+  }
+
   // Stop any currently playing speech to avoid overlapping voices ("duas falas ao mesmo tempo")
   stopAllAIAudio();
   isAITalkingFlag = true;
 
-  const settings = getSavedSettings();
   const selectedVoice = customVoice || settings.ttsVoice || "Kore";
 
   try {

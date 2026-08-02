@@ -100,43 +100,79 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
     let animFrame: number | null = null;
 
     if (isCallActive && isVideoOn) {
-      navigator.mediaDevices
-        .getUserMedia({ video: { width: 1280, height: 720 }, audio: true })
-        .then((s) => {
+      const getMedia = async () => {
+        try {
+          // Attempt 1: Ideal high-definition mobile/desktop video
+          const s = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: true,
+          });
+          return { s, isAudioOnly: false };
+        } catch (err1) {
+          console.warn('Attempt 1 failed, trying basic video constraints:', err1);
+          try {
+            // Attempt 2: Flexible basic video
+            const s = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true,
+            });
+            return { s, isAudioOnly: false };
+          } catch (err2) {
+            console.warn('Camera locked or unavailable on mobile, falling back to audio only:', err2);
+            // Attempt 3: Graceful fallback to audio-only so the call remains fully operational
+            const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+            return { s, isAudioOnly: true };
+          }
+        }
+      };
+
+      getMedia()
+        .then(({ s, isAudioOnly }) => {
           activeStream = s;
           setStream(s);
-          setCameraError(null);
-          if (userVideoRef.current) {
+          if (isAudioOnly) {
+            setCameraError('Câmera em uso em outra aba. Chamada mantida com Áudio.');
+          } else {
+            setCameraError(null);
+          }
+
+          if (userVideoRef.current && !isAudioOnly) {
             userVideoRef.current.srcObject = s;
           }
 
           // Audio level meter
           try {
-            audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const source = audioCtx.createMediaStreamSource(s);
-            const analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 64;
-            source.connect(analyser);
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            const updateMeter = () => {
-              analyser.getByteFrequencyData(dataArray);
-              let sum = 0;
-              for (let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
+            const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioCtxClass) {
+              audioCtx = new AudioCtxClass();
+              if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
               }
-              const average = sum / dataArray.length;
-              setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
-              animFrame = requestAnimationFrame(updateMeter);
-            };
-            updateMeter();
+              const source = audioCtx.createMediaStreamSource(s);
+              const analyser = audioCtx.createAnalyser();
+              analyser.fftSize = 64;
+              source.connect(analyser);
+              const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+              const updateMeter = () => {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                  sum += dataArray[i];
+                }
+                const average = sum / dataArray.length;
+                setAudioLevel(Math.min(100, Math.round((average / 128) * 100)));
+                animFrame = requestAnimationFrame(updateMeter);
+              };
+              updateMeter();
+            }
           } catch (e) {
             console.warn('Audio meter init error', e);
           }
         })
         .catch((err) => {
-          console.warn('Camera permission denied or unavailable:', err);
-          setCameraError('Câmera indisponível ou permissão negada.');
+          console.warn('Permissão de mídia negada:', err);
+          setCameraError('Permissão de mídia negada no navegador.');
           setStream(null);
         });
     } else {
@@ -151,7 +187,9 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
         activeStream.getTracks().forEach((t) => t.stop());
       }
       if (animFrame) cancelAnimationFrame(animFrame);
-      if (audioCtx) audioCtx.close();
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close().catch(() => {});
+      }
     };
   }, [isCallActive, isVideoOn]);
 
