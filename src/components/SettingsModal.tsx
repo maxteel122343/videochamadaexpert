@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check } from 'lucide-react';
+import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check, Copy } from 'lucide-react';
 import { AppSettings } from '../types';
 import { DEFAULT_GEMINI_KEY_1, DEFAULT_GEMINI_KEY_2, DEFAULT_GEMINI_KEY_3, playAIVoice } from '../services/api';
 
@@ -25,7 +25,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         ? 'key3'
         : 'key1')
   );
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(settings.geminiApiKey || DEFAULT_GEMINI_KEY_1);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(
+    settings.geminiApiKey && settings.geminiApiKey.trim().length > 0
+      ? settings.geminiApiKey
+      : DEFAULT_GEMINI_KEY_1
+  );
   const [ttsVoice, setTtsVoice] = useState<string>(settings.ttsVoice || 'Kore');
   const [aiPersonality, setAiPersonality] = useState<string>(settings.aiPersonality || 'Acolhedora, Inteligente e Atraente');
   const [autoStartCall, setAutoStartCall] = useState<boolean>(settings.autoStartCall ?? false);
@@ -34,8 +38,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [isTestingVoice, setIsTestingVoice] = useState<boolean>(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleCopy = (textToCopy: string, label: string) => {
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedKey(label);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
+  };
 
   const handleSelectPreset = (preset: 'key1' | 'key2' | 'key3' | 'custom') => {
     setSelectedPresetKey(preset);
@@ -213,60 +227,108 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* PRESET KEYS SELECTION */}
             <div className="space-y-2 pt-1">
-              <label className="text-xs font-semibold text-slate-700">Selecione uma das Chaves de API Padrão ou Insira a Sua:</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">Selecione uma das Chaves de API Padrão ou Insira a Sua:</label>
+                {copiedKey && (
+                  <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 animate-fade-in flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Copiado!
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
+                <div
                   onClick={() => handleSelectPreset('key1')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
                     selectedPresetKey === 'key1'
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
-                  <div className="truncate">
+                  <div className="truncate min-w-0 flex-1">
                     <p className="text-xs font-bold text-indigo-900">⭐ Chave Padrão 1 (Principal)</p>
-                    <p className="text-[10px] text-slate-500 font-mono truncate">AIzaSyBuJvwo...</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_1 ? `${DEFAULT_GEMINI_KEY_1.slice(0, 12)}...` : 'Chave Padrão 1'}
+                    </p>
                   </div>
-                  {selectedPresetKey === 'key1' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
-                </button>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_1, 'key1');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key1' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key1' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
 
-                <button
-                  type="button"
+                <div
                   onClick={() => handleSelectPreset('key2')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
                     selectedPresetKey === 'key2'
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
-                  <div className="truncate">
+                  <div className="truncate min-w-0 flex-1">
                     <p className="text-xs font-bold">Chave Padrão 2</p>
-                    <p className="text-[10px] text-slate-500 font-mono truncate">AIzaSyDMauXE...</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_2 ? `${DEFAULT_GEMINI_KEY_2.slice(0, 12)}...` : 'Chave Padrão 2'}
+                    </p>
                   </div>
-                  {selectedPresetKey === 'key2' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
-                </button>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_2, 'key2');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key2' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key2' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
 
-                <button
-                  type="button"
+                <div
                   onClick={() => handleSelectPreset('key3')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
                     selectedPresetKey === 'key3'
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
-                  <div className="truncate">
+                  <div className="truncate min-w-0 flex-1">
                     <p className="text-xs font-bold">Chave Padrão 3</p>
-                    <p className="text-[10px] text-slate-500 font-mono truncate">AQ.Ab8RN6IZ3...</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_3 ? `${DEFAULT_GEMINI_KEY_3.slice(0, 12)}...` : 'Chave Padrão 3'}
+                    </p>
                   </div>
-                  {selectedPresetKey === 'key3' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
-                </button>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 3"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_3, 'key3');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key3' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key3' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
 
-                <button
-                  type="button"
+                <div
                   onClick={() => handleSelectPreset('custom')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
                     selectedPresetKey === 'custom'
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
@@ -277,7 +339,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <p className="text-[10px] text-slate-500 truncate">Sua própria chave</p>
                   </div>
                   {selectedPresetKey === 'custom' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
-                </button>
+                </div>
               </div>
             </div>
 
@@ -298,29 +360,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             ) : null}
 
-            <div className="relative">
-              <input
-                type="text"
-                value={geminiApiKey}
-                onChange={(e) => {
-                  setGeminiApiKey(e.target.value);
-                  setSelectedPresetKey('custom');
-                  setUseCustomApiKey(true);
-                }}
-                placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
-                className="w-full pl-3 pr-24 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setUseCustomApiKey(true);
-                  handleTestKey();
-                }}
-                disabled={testStatus === 'testing'}
-                className="absolute right-1.5 top-1.5 px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
-              >
-                {testStatus === 'testing' ? 'Testando...' : 'Testar Key'}
-              </button>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600 flex items-center justify-between">
+                <span>Chave de API Selecionada (Visível para Copiar / Testar):</span>
+                {copiedKey === 'input' && (
+                  <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Chave Copiada!
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={geminiApiKey}
+                  onChange={(e) => {
+                    setGeminiApiKey(e.target.value);
+                    setSelectedPresetKey('custom');
+                    setUseCustomApiKey(true);
+                  }}
+                  placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
+                  className="w-full pl-3 pr-32 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Copiar esta Chave"
+                    onClick={() => handleCopy(geminiApiKey, 'input')}
+                    className="p-1.5 text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded-md text-xs transition flex items-center gap-1"
+                  >
+                    {copiedKey === 'input' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseCustomApiKey(true);
+                      handleTestKey();
+                    }}
+                    disabled={testStatus === 'testing'}
+                    className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
+                  >
+                    {testStatus === 'testing' ? 'Testando...' : 'Testar Key'}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between pt-1">

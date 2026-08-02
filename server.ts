@@ -14,7 +14,7 @@ const GEMINI_TEXT_MODEL = "gemini-3.6-flash";
 const GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
 
 // Default fallback key
-const DEFAULT_KEY = process.env.GEMINI_API_KEY || "";
+const DEFAULT_KEY = "AQ.Ab8RN6LQI_k-dZOrvRJk_7mXFiSyKvPZZ17WmpYrU9kG5vs-1w";
 
 // Helper to clean up raw JSON errors from Gemini API
 function formatGeminiError(error: any): string {

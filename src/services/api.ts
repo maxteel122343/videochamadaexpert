@@ -1,10 +1,37 @@
 import { Task, ChatMessage, AppSettings } from "../types";
 import { GoogleGenAI, Modality } from "@google/genai";
 
-export const DEFAULT_GEMINI_KEY_1 = "";
-export const DEFAULT_GEMINI_KEY_2 = "";
-export const DEFAULT_GEMINI_KEY_3 = "";
-export const DEFAULT_GEMINI_KEY = "";
+const getEnvKey = (envName: string) => {
+  try {
+    const keysToTry = [
+      envName,
+      `VITE_${envName}`,
+      // Handle potential typo seen in Vercel settings (GEMINI_API_KAY)
+      envName === 'GEMINI_API_KEY' ? 'GEMINI_API_KAY' : '',
+      envName === 'GEMINI_API_KEY' ? 'VITE_GEMINI_API_KAY' : '',
+    ].filter(Boolean);
+
+    if (typeof process !== "undefined" && process?.env) {
+      for (const k of keysToTry) {
+        if (process.env[k]) return process.env[k] as string;
+      }
+    }
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv) {
+      for (const k of keysToTry) {
+        if (metaEnv[k]) return metaEnv[k] as string;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+};
+
+export const DEFAULT_GEMINI_KEY_1 = getEnvKey("GEMINI_API_KEY");
+export const DEFAULT_GEMINI_KEY_2 = getEnvKey("GEMINI_API_KEY_2");
+export const DEFAULT_GEMINI_KEY_3 = getEnvKey("GEMINI_API_KEY_3");
+export const DEFAULT_GEMINI_KEY = DEFAULT_GEMINI_KEY_1 || DEFAULT_GEMINI_KEY_2 || DEFAULT_GEMINI_KEY_3 || "";
 
 export function getSavedSettings(): AppSettings {
   const saved = localStorage.getItem('app_settings');
