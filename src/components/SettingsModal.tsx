@@ -164,7 +164,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handlePreviewVoice = async () => {
     setIsTestingVoice(true);
     try {
-      await playAIVoice('Olá! Esta é a minha voz atraente para a nossa videochamada.', ttsVoice);
+      await playAIVoice('Olá! Esta é a minha voz atraente para a nossa videochamada.', { customVoice: ttsVoice, isManualTest: true });
     } catch (e) {
       console.error(e);
     } finally {

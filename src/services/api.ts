@@ -73,11 +73,15 @@ function getHeaders() {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  
-  if (settings.useCustomApiKey && settings.geminiApiKey) {
-    headers["x-gemini-api-key"] = settings.geminiApiKey.trim();
+
+  const keyToSend = (settings.geminiApiKey && settings.geminiApiKey.trim())
+    ? settings.geminiApiKey.trim()
+    : DEFAULT_GEMINI_KEY;
+
+  if (keyToSend) {
+    headers["x-gemini-api-key"] = keyToSend;
   }
-  
+
   return headers;
 }
 
@@ -317,12 +321,23 @@ export function getIsAITalking(): boolean {
 }
 
 // Resilient Audio Speech Handler with Gemini TTS + Client Direct Call + Seamless Web Speech API
-export async function playAIVoice(text: string, customVoice?: string): Promise<void> {
+export async function playAIVoice(
+  text: string,
+  customVoiceOrOptions?: string | { customVoice?: string; isManualTest?: boolean }
+): Promise<void> {
   const settings = getSavedSettings();
 
+  const isManualTest = typeof customVoiceOrOptions === 'object'
+    ? customVoiceOrOptions.isManualTest
+    : false;
+
+  const customVoice = typeof customVoiceOrOptions === 'string'
+    ? customVoiceOrOptions
+    : customVoiceOrOptions?.customVoice;
+
   // Se a voz sintética estiver desativada ou autoSpeak desabilitado (e não for um teste manual de voz)
-  if (!customVoice && (settings.disableTtsVoice || !settings.autoSpeak)) {
-    console.log("Voz sintética / Fala automática desativada (Prevenção de Loop de Áudio).");
+  if (!isManualTest && (settings.disableTtsVoice || !settings.autoSpeak)) {
+    console.log("Voz sintética desativada nas configurações (Chat e Áudio em silêncio).");
     return;
   }
 
