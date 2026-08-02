@@ -39,6 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSelectPreset = (preset: 'key1' | 'key2' | 'key3' | 'custom') => {
     setSelectedPresetKey(preset);
+    setUseCustomApiKey(true);
     if (preset === 'key1') {
       setGeminiApiKey(DEFAULT_GEMINI_KEY_1);
     } else if (preset === 'key2') {
@@ -297,22 +298,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             ) : null}
 
-            <div className={`relative ${!useCustomApiKey ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="relative">
               <input
                 type="text"
-                disabled={!useCustomApiKey}
                 value={geminiApiKey}
                 onChange={(e) => {
                   setGeminiApiKey(e.target.value);
                   setSelectedPresetKey('custom');
+                  setUseCustomApiKey(true);
                 }}
                 placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
                 className="w-full pl-3 pr-24 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
               <button
                 type="button"
-                onClick={handleTestKey}
-                disabled={testStatus === 'testing' || !useCustomApiKey}
+                onClick={() => {
+                  setUseCustomApiKey(true);
+                  handleTestKey();
+                }}
+                disabled={testStatus === 'testing'}
                 className="absolute right-1.5 top-1.5 px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
               >
                 {testStatus === 'testing' ? 'Testando...' : 'Testar Key'}

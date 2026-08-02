@@ -4,7 +4,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 export const DEFAULT_GEMINI_KEY_1 = "";
 export const DEFAULT_GEMINI_KEY_2 = "";
 export const DEFAULT_GEMINI_KEY_3 = "";
-export const DEFAULT_GEMINI_KEY = DEFAULT_GEMINI_KEY_1;
+export const DEFAULT_GEMINI_KEY = "";
 
 export function getSavedSettings(): AppSettings {
   const saved = localStorage.getItem('app_settings');

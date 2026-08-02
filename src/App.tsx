@@ -1049,11 +1049,11 @@ export default function App() {
       </div>
 
       {/* MOBILE RESPONSIVE LAYOUT (md:hidden) */}
-      <main className="md:hidden flex-1 p-2 flex flex-col gap-2 overflow-x-hidden">
+      <main className="md:hidden flex-1 p-2 flex flex-col overflow-hidden">
         {activeMobileTab === 'call' && (
-          <div className="flex flex-col gap-3 min-h-0 h-[calc(100dvh-80px)] overflow-y-auto pb-20">
+          <div className="flex flex-col h-[calc(100dvh-64px)] overflow-hidden gap-2 pb-12">
             {/* Top Section: User Camera / Video Stage */}
-            <div className="shrink-0 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
+            <div className="flex-1 min-h-0 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900 flex flex-col">
               <VideoCallStage
                 isCallActive={isCallActive}
                 onStartCall={handleStartCall}
@@ -1117,7 +1117,7 @@ export default function App() {
 
             {/* Optional AI Chat Transcript inside Call Tab when enabled */}
             {isChatOpen && (
-              <div className="h-72 shrink-0 rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+              <div className="flex-1 min-h-0 rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white flex flex-col">
                 <ChatDrawer
                   messages={messages}
                   onSendMessage={handleUserMessage}

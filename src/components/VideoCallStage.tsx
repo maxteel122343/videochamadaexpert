@@ -213,7 +213,7 @@ export const VideoCallStage: React.FC<VideoCallStageProps> = ({
   };
 
   return (
-    <div className="relative w-full flex-1 min-h-[360px] sm:min-h-[460px] md:min-h-[540px] max-h-[82vh] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col justify-between p-2 sm:p-3 select-none">
+    <div className="relative w-full h-full flex-1 min-h-[160px] sm:min-h-[380px] md:min-h-[500px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col justify-between p-2 sm:p-3 select-none">
       {/* Offscreen Canvas for Frame Capture */}
       <canvas ref={canvasRef} className="hidden" />
 
