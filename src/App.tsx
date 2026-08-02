@@ -6,9 +6,21 @@ import { TaskManager } from './components/TaskManager';
 import { ChatDrawer } from './components/ChatDrawer';
 import { AdviceModal } from './components/AdviceModal';
 import { SettingsModal } from './components/SettingsModal';
+import { TaskCreatedOverlay } from './components/TaskCreatedOverlay';
+import { MobileNavigation, MobileTab } from './components/MobileNavigation';
+import { DesktopSidebar } from './components/DesktopSidebar';
 import { Task, TaskStatus, ChatMessage, InCallReminder, AppSettings } from './types';
 import { INITIAL_TASKS } from './data/initialTasks';
-import { sendChatMessage, sendAudioChatMessage, analyzeVideoFrame, generateReminderVoice, playAIVoice, getSavedSettings } from './services/api';
+import {
+  sendChatMessage,
+  sendAudioChatMessage,
+  analyzeVideoFrame,
+  generateReminderVoice,
+  playAIVoice,
+  getSavedSettings,
+  stopAllAIAudio,
+  getIsAITalking,
+} from './services/api';
 
 export default function App() {
   // Settings state
@@ -48,10 +60,26 @@ export default function App() {
   ]);
 
   const [inCallReminder, setInCallReminder] = useState<InCallReminder | null>(null);
+  const [pendingCreatedTask, setPendingCreatedTask] = useState<Task | null>(null);
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>('call');
+  const [desktopTab, setDesktopTab] = useState<'call' | 'chat' | 'tasks'>('call');
+
   const [isHandsFreeMode, setIsHandsFreeMode] = useState<boolean>(true);
   const [isTasksOpen, setIsTasksOpen] = useState<boolean>(true);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isAdviceModalOpen, setIsAdviceModalOpen] = useState<boolean>(false);
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(console.warn);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(console.warn);
+      }
+    }
+  };
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState<boolean>(false);
   const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
   const [isAnalyzingVision, setIsAnalyzingVision] = useState<boolean>(false);
@@ -76,6 +104,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('app_tasks', JSON.stringify(tasks));
   }, [tasks]);
+
+  // Auto-start video call if configured in settings
+  useEffect(() => {
+    const saved = getSavedSettings();
+    if (saved.autoStartCall && !isCallActive) {
+      handleStartCall();
+    }
+  }, []);
 
   // Audio chime synthesizer for in-call task reminders
   const playAlertSound = () => {
@@ -189,8 +225,8 @@ export default function App() {
           };
 
           recognition.onresult = (event: any) => {
-            // Ignore mic speech if AI is currently thinking or speaking to prevent speaker echo feedback
-            if (isLoadingAi || aiState === 'SPEAKING') {
+            // Ignore mic speech if AI is currently thinking/speaking or a task popup is blocking screen
+            if (isLoadingAi || aiState === 'SPEAKING' || getIsAITalking() || pendingCreatedTask) {
               return;
             }
 
@@ -428,6 +464,10 @@ export default function App() {
         }
       }
 
+      if (createdTask) {
+        setPendingCreatedTask(createdTask);
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -484,8 +524,8 @@ export default function App() {
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
           vadInterval = setInterval(() => {
-            // Do not capture voice packets while AI is thinking or speaking or when user is manually recording
-            if (isLoadingAi || aiState === 'SPEAKING' || isRecordingAudio) {
+            // Do not capture voice packets while AI is thinking/speaking, AI audio is outputting, or task overlay is open
+            if (isLoadingAi || aiState === 'SPEAKING' || getIsAITalking() || isRecordingAudio || pendingCreatedTask) {
               if (isVadRecordingRef.current && vadRecorderRef.current && vadRecorderRef.current.state !== 'inactive') {
                 try { vadRecorderRef.current.stop(); } catch (e) {}
                 isVadRecordingRef.current = false;
@@ -653,6 +693,10 @@ export default function App() {
           setTasks((prev) => [taskToAdd, ...prev]);
           createdTask = taskToAdd;
         }
+      }
+
+      if (createdTask) {
+        setPendingCreatedTask(createdTask);
       }
 
       setMessages((prev) => [
@@ -845,13 +889,14 @@ export default function App() {
   };
 
   const handleEndCall = () => {
+    stopAllAIAudio();
     setIsCallActive(false);
     setAiState('IDLE');
     setInCallReminder(null);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white pb-16 md:pb-0">
       {/* HEADER */}
       <Header
         isCallActive={isCallActive}
@@ -861,64 +906,199 @@ export default function App() {
         onTestReminder={() => handleTestReminderForTask()}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         tasks={tasks}
+        showTopHeader={settings.showTopHeader ?? true}
       />
 
-      {/* MAIN CONTAINER */}
-      <main className="flex-1 p-3 md:p-5 max-w-7xl w-full mx-auto flex flex-col gap-4">
-        {/* VIDEO CALL STAGE */}
-        <VideoCallStage
-          isCallActive={isCallActive}
-          onStartCall={handleStartCall}
-          onEndCall={handleEndCall}
-          isMicOn={isMicOn}
-          onToggleMic={() => setIsMicOn(!isMicOn)}
-          isVideoOn={isVideoOn}
-          onToggleVideo={() => setIsVideoOn(!isVideoOn)}
-          aiState={aiState}
-          latestAiText={latestAiText}
-          interimTranscript={interimTranscript}
-          isRecordingAudio={isRecordingAudio}
-          onToggleVoiceRecording={toggleVoiceRecording}
-          isHandsFreeMode={isHandsFreeMode}
-          onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
-          inCallReminder={inCallReminder}
-          onUpdateTaskStatus={handleUpdateTaskStatus}
-          onPostponeReminder={handlePostponeReminder}
-          onAskTaskAdviceInCall={handleAskAdviceForTask}
-          onCaptureFrameAndAnalyze={handleCaptureFrameAndAnalyze}
-          isAnalyzingVision={isAnalyzingVision}
-          isMutedAI={isMutedAI}
-          onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
-        />
+      {/* TASK CREATED OVERLAY (BLOCKING POPUP UNTIL USER CONFIRMS STATUS) */}
+      <TaskCreatedOverlay
+        task={pendingCreatedTask}
+        onConfirmStatus={(status) => {
+          if (pendingCreatedTask) {
+            handleUpdateTaskStatus(pendingCreatedTask.id, status);
+          }
+          setPendingCreatedTask(null);
+        }}
+        onDismiss={() => setPendingCreatedTask(null)}
+      />
 
-        {/* CALL CONTROLS TOOLBAR */}
-        <CallControls
+      {/* DESKTOP SIDEBAR + MAIN CONTENT CONTAINER (md:flex) */}
+      <div className="hidden md:flex flex-1 overflow-hidden min-h-[calc(100vh-64px)]">
+        {/* LEFT PC SIDEBAR */}
+        <DesktopSidebar
+          activeTab={desktopTab}
+          onSelectTab={(tab) => setDesktopTab(tab)}
           isCallActive={isCallActive}
-          onToggleCall={() => (isCallActive ? handleEndCall() : handleStartCall())}
-          isMicOn={isMicOn}
-          onToggleMic={() => setIsMicOn(!isMicOn)}
-          isVideoOn={isVideoOn}
-          onToggleVideo={() => setIsVideoOn(!isVideoOn)}
-          isMutedAI={isMutedAI}
-          onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
-          isHandsFreeMode={isHandsFreeMode}
-          onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
-          isTasksOpen={isTasksOpen}
-          onToggleTasks={() => setIsTasksOpen(!isTasksOpen)}
-          isChatOpen={isChatOpen}
-          onToggleChat={() => setIsChatOpen(!isChatOpen)}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
           onOpenAdviceModal={() => setIsAdviceModalOpen(true)}
-          onAnalyzeCameraVision={() => {
-            const btn = document.querySelector<HTMLButtonElement>('[title*="Tirar foto da câmera"]');
-            btn?.click();
-          }}
-          isAnalyzingVision={isAnalyzingVision}
+          pendingTaskCount={tasks.filter((t) => t.status !== 'CONCLUIDO').length}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         />
 
-        {/* BOTTOM PANELS GRID: TASK MANAGER & CHAT DRAWER */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[480px]">
-          {/* Task Manager Panel */}
-          {isTasksOpen && (
+        {/* MAIN DESKTOP CONTENT */}
+        <main className="flex-1 p-4 max-w-7xl w-full mx-auto flex flex-col gap-4 overflow-y-auto">
+          {/* 1. HORIZONTAL SPLIT VIEW FOR CHAMADA (LEFT CAMERA / STAGE, RIGHT AI CHAT) */}
+          {desktopTab === 'call' && (
+            <div className={`grid gap-4 h-[calc(100vh-100px)] ${isChatOpen ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+              {/* Left Column: User Camera & Video Call Stage */}
+              <div className="flex flex-col gap-3 h-full overflow-hidden">
+                <div className="flex-1 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
+                  <VideoCallStage
+                    isCallActive={isCallActive}
+                    onStartCall={handleStartCall}
+                    onEndCall={handleEndCall}
+                    isMicOn={isMicOn}
+                    onToggleMic={() => setIsMicOn(!isMicOn)}
+                    isVideoOn={isVideoOn}
+                    onToggleVideo={() => setIsVideoOn(!isVideoOn)}
+                    aiState={aiState}
+                    latestAiText={latestAiText}
+                    interimTranscript={interimTranscript}
+                    isRecordingAudio={isRecordingAudio}
+                    onToggleVoiceRecording={toggleVoiceRecording}
+                    isHandsFreeMode={isHandsFreeMode}
+                    onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
+                    inCallReminder={inCallReminder}
+                    onUpdateTaskStatus={handleUpdateTaskStatus}
+                    onPostponeReminder={handlePostponeReminder}
+                    onAskTaskAdviceInCall={handleAskAdviceForTask}
+                    onCaptureFrameAndAnalyze={handleCaptureFrameAndAnalyze}
+                    isAnalyzingVision={isAnalyzingVision}
+                    isMutedAI={isMutedAI}
+                    onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+                  />
+                </div>
+
+                <CallControls
+                  isCallActive={isCallActive}
+                  onToggleCall={() => (isCallActive ? handleEndCall() : handleStartCall())}
+                  isMicOn={isMicOn}
+                  onToggleMic={() => setIsMicOn(!isMicOn)}
+                  isVideoOn={isVideoOn}
+                  onToggleVideo={() => setIsVideoOn(!isVideoOn)}
+                  isMutedAI={isMutedAI}
+                  onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+                  isHandsFreeMode={isHandsFreeMode}
+                  onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
+                  isTasksOpen={isTasksOpen}
+                  onToggleTasks={() => setIsTasksOpen(!isTasksOpen)}
+                  isChatOpen={isChatOpen}
+                  onToggleChat={() => setIsChatOpen(!isChatOpen)}
+                  onOpenAdviceModal={() => setIsAdviceModalOpen(true)}
+                  onAnalyzeCameraVision={() => {
+                    const btn = document.querySelector<HTMLButtonElement>('[title*="Tirar foto da câmera"]');
+                    btn?.click();
+                  }}
+                  isAnalyzingVision={isAnalyzingVision}
+                  isRecordingAudio={isRecordingAudio}
+                  onToggleVoiceRecording={toggleVoiceRecording}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={handleToggleFullscreen}
+                />
+              </div>
+
+              {/* Right Column: AI Chat Transcript (Visible when isChatOpen is true) */}
+              {isChatOpen && (
+                <div className="h-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+                  <ChatDrawer
+                    messages={messages}
+                    onSendMessage={handleUserMessage}
+                    isCallActive={isCallActive}
+                    isLoadingAi={isLoadingAi}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. EXCLUSIVE AI CHAT VIEW */}
+          {desktopTab === 'chat' && (
+            <div className="h-[calc(100vh-100px)] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+              <ChatDrawer
+                messages={messages}
+                onSendMessage={handleUserMessage}
+                isCallActive={isCallActive}
+                isLoadingAi={isLoadingAi}
+              />
+            </div>
+          )}
+
+          {/* 3. EXCLUSIVE CARDS & TASKS VIEW */}
+          {desktopTab === 'tasks' && (
+            <div className="h-[calc(100vh-100px)] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+              <TaskManager
+                tasks={tasks}
+                onAddTask={handleAddTask}
+                onUpdateTaskStatus={handleUpdateTaskStatus}
+                onDeleteTask={handleDeleteTask}
+                onAskAdviceForTask={handleAskAdviceForTask}
+                onTestReminderForTask={handleTestReminderForTask}
+                isOpenModal={isNewTaskModalOpen}
+                onOpenModal={() => setIsNewTaskModalOpen(true)}
+                onCloseModal={() => setIsNewTaskModalOpen(false)}
+              />
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* MOBILE RESPONSIVE LAYOUT (md:hidden) */}
+      <main className="md:hidden flex-1 p-2 flex flex-col gap-2">
+        {activeMobileTab === 'call' && (
+          <div className="flex flex-col h-[calc(100vh-140px)] gap-2">
+            {/* Top Half (~50% height): User Camera / Video Stage */}
+            <div className="h-[48%] rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
+              <VideoCallStage
+                isCallActive={isCallActive}
+                onStartCall={handleStartCall}
+                onEndCall={handleEndCall}
+                isMicOn={isMicOn}
+                onToggleMic={() => setIsMicOn(!isMicOn)}
+                isVideoOn={isVideoOn}
+                onToggleVideo={() => setIsVideoOn(!isVideoOn)}
+                aiState={aiState}
+                latestAiText={latestAiText}
+                interimTranscript={interimTranscript}
+                isRecordingAudio={isRecordingAudio}
+                onToggleVoiceRecording={toggleVoiceRecording}
+                isHandsFreeMode={isHandsFreeMode}
+                onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
+                inCallReminder={inCallReminder}
+                onUpdateTaskStatus={handleUpdateTaskStatus}
+                onPostponeReminder={handlePostponeReminder}
+                onAskTaskAdviceInCall={handleAskAdviceForTask}
+                onCaptureFrameAndAnalyze={handleCaptureFrameAndAnalyze}
+                isAnalyzingVision={isAnalyzingVision}
+                isMutedAI={isMutedAI}
+                onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+              />
+            </div>
+
+            {/* Bottom Half (~50% height): AI Chat Transcript */}
+            <div className="h-[52%] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+              <ChatDrawer
+                messages={messages}
+                onSendMessage={handleUserMessage}
+                isCallActive={isCallActive}
+                isLoadingAi={isLoadingAi}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeMobileTab === 'chat' && (
+          <div className="h-[calc(100vh-130px)] rounded-2xl overflow-hidden shadow-md border border-slate-200">
+            <ChatDrawer
+              messages={messages}
+              onSendMessage={handleUserMessage}
+              isCallActive={isCallActive}
+              isLoadingAi={isLoadingAi}
+            />
+          </div>
+        )}
+
+        {activeMobileTab === 'tasks' && (
+          <div className="h-[calc(100vh-130px)] rounded-2xl overflow-hidden shadow-md border border-slate-200">
             <TaskManager
               tasks={tasks}
               onAddTask={handleAddTask}
@@ -930,19 +1110,23 @@ export default function App() {
               onOpenModal={() => setIsNewTaskModalOpen(true)}
               onCloseModal={() => setIsNewTaskModalOpen(false)}
             />
-          )}
-
-          {/* Chat Transcript Panel */}
-          {isChatOpen && (
-            <ChatDrawer
-              messages={messages}
-              onSendMessage={handleUserMessage}
-              isCallActive={isCallActive}
-              isLoadingAi={isLoadingAi}
-            />
-          )}
-        </div>
+          </div>
+        )}
       </main>
+
+      {/* HORIZONTAL MOBILE NAVBAR WITH 4 ICONS (Call, Chat IA, Cards Tasks, Settings) */}
+      <MobileNavigation
+        activeTab={activeMobileTab}
+        onSelectTab={(tab) => {
+          if (tab === 'settings') {
+            setIsSettingsModalOpen(true);
+          } else {
+            setActiveMobileTab(tab);
+          }
+        }}
+        isCallActive={isCallActive}
+        pendingTaskCount={tasks.filter((t) => t.status !== 'CONCLUIDO').length}
+      />
 
       {/* ADVICE SELECTION MODAL */}
       <AdviceModal

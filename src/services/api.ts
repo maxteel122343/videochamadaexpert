@@ -1,7 +1,7 @@
 import { Task, ChatMessage, AppSettings } from "../types";
 import { GoogleGenAI, Modality } from "@google/genai";
 
-export const DEFAULT_GEMINI_KEY = "AQ.Ab8RN6LQI_k-dZOrvRJk_7mXFiSyKvPZZ17WmpYrU9kG5vs-1w";
+export const DEFAULT_GEMINI_KEY = "AIzaSyDMauXEsNaIfCcXs5Ry4eHMSfTHKC0A-uU";
 
 export function getSavedSettings(): AppSettings {
   const saved = localStorage.getItem('app_settings');
@@ -14,6 +14,8 @@ export function getSavedSettings(): AppSettings {
         ttsVoice: parsed.ttsVoice || "Kore",
         aiPersonality: parsed.aiPersonality || "Acolhedora, Inteligente e Atraente",
         autoSpeak: parsed.autoSpeak ?? true,
+        autoStartCall: parsed.autoStartCall ?? false,
+        showTopHeader: parsed.showTopHeader ?? true,
         customInstructions: parsed.customInstructions || '',
       };
     } catch (e) {
@@ -26,6 +28,8 @@ export function getSavedSettings(): AppSettings {
     ttsVoice: "Kore", // Kore, Aoede, Fenrir, Puck, Charon
     aiPersonality: "Acolhedora, Inteligente e Atraente",
     autoSpeak: true,
+    autoStartCall: false,
+    showTopHeader: true,
     customInstructions: "",
   };
 }
@@ -249,68 +253,109 @@ export async function generateReminderVoice(
   }
 }
 
+// Audio Concurrency Control Locks
+let currentAudioCtx: AudioContext | null = null;
+let currentBufferSource: AudioBufferSourceNode | null = null;
+let isAITalkingFlag = false;
+
+export function stopAllAIAudio(): void {
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (currentBufferSource) {
+      try { currentBufferSource.stop(); } catch (e) {}
+      currentBufferSource = null;
+    }
+    if (currentAudioCtx && currentAudioCtx.state !== 'closed') {
+      try { currentAudioCtx.close(); } catch (e) {}
+      currentAudioCtx = null;
+    }
+  } catch (err) {
+    console.warn("Error stopping audio:", err);
+  } finally {
+    isAITalkingFlag = false;
+  }
+}
+
+export function getIsAITalking(): boolean {
+  return isAITalkingFlag;
+}
+
 // Resilient Audio Speech Handler with Gemini TTS + Client Direct Call + Seamless Web Speech API
 export async function playAIVoice(text: string, customVoice?: string): Promise<void> {
+  // Stop any currently playing speech to avoid overlapping voices ("duas falas ao mesmo tempo")
+  stopAllAIAudio();
+  isAITalkingFlag = true;
+
   const settings = getSavedSettings();
   const selectedVoice = customVoice || settings.ttsVoice || "Kore";
 
-  // Option A: Direct Client SDK Call if Custom API Key is active on client
-  if (settings.useCustomApiKey && settings.geminiApiKey && settings.geminiApiKey.trim()) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey.trim() });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: `Fale em português com tom muito natural, fluido e atraente: ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: selectedVoice },
+  try {
+    // Option A: Direct Client SDK Call if Custom API Key is active on client
+    if (settings.useCustomApiKey && settings.geminiApiKey && settings.geminiApiKey.trim()) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey.trim() });
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `Fale em português com tom muito natural, fluido e atraente: ${text}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
+              },
             },
           },
-        },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          await playPcmBase64(base64Audio);
+          return;
+        }
+      } catch (clientErr) {
+        console.warn("Síntese nativa com chave do cliente indisponível, recorrendo ao backend ou voz local:", clientErr);
+      }
+    }
+
+    // Option B: Server Proxy Call
+    try {
+      const response = await fetch("/api/gemini/speak", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          text,
+          voiceName: selectedVoice,
+        }),
       });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        await playPcmBase64(base64Audio);
-        return;
+      if (response.ok) {
+        const data = await response.json().catch(() => ({ success: false }));
+        if (data.success && data.audioBase64) {
+          await playPcmBase64(data.audioBase64);
+          return;
+        }
       }
-    } catch (clientErr) {
-      console.warn("Síntese nativa com chave do cliente indisponível, recorrendo ao backend ou voz local:", clientErr);
+    } catch (err) {
+      console.warn("Voz nativa do Gemini indisponível. Ativando síntese local do navegador...");
     }
+
+    // Option C: Native Web Speech API Fallback (Smooth, zero red console errors)
+    await speakWithWebSpeech(text);
+  } finally {
+    // Small delay before unlocking to avoid mic recording echo
+    setTimeout(() => {
+      isAITalkingFlag = false;
+    }, 400);
   }
-
-  // Option B: Server Proxy Call
-  try {
-    const response = await fetch("/api/gemini/speak", {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({
-        text,
-        voiceName: selectedVoice,
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json().catch(() => ({ success: false }));
-      if (data.success && data.audioBase64) {
-        await playPcmBase64(data.audioBase64);
-        return;
-      }
-    }
-  } catch (err) {
-    console.warn("Voz nativa do Gemini indisponível. Ativando síntese local do navegador...");
-  }
-
-  // Option C: Native Web Speech API Fallback (Smooth, zero red console errors)
-  await speakWithWebSpeech(text);
 }
 
 // Fallback to Web Speech API
 function speakWithWebSpeech(text: string): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      isAITalkingFlag = false;
       resolve();
       return;
     }
@@ -347,7 +392,10 @@ async function playPcmBase64(base64Data: string): Promise<void> {
         bytes[i] = binary.charCodeAt(i);
       }
 
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioContextClass({ sampleRate: 24000 });
+      currentAudioCtx = audioCtx;
+
       const pcm16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
@@ -358,9 +406,13 @@ async function playPcmBase64(base64Data: string): Promise<void> {
       buffer.getChannelData(0).set(float32);
 
       const source = audioCtx.createBufferSource();
+      currentBufferSource = source;
       source.buffer = buffer;
       source.connect(audioCtx.destination);
-      source.onended = () => resolve();
+      source.onended = () => {
+        currentBufferSource = null;
+        resolve();
+      };
       source.start();
     } catch (err) {
       console.warn("Audio playback warn:", err);

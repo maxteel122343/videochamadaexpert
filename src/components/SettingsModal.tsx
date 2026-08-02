@@ -20,6 +20,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [geminiApiKey, setGeminiApiKey] = useState<string>(settings.geminiApiKey || DEFAULT_GEMINI_KEY);
   const [ttsVoice, setTtsVoice] = useState<string>(settings.ttsVoice || 'Kore');
   const [aiPersonality, setAiPersonality] = useState<string>(settings.aiPersonality || 'Acolhedora, Inteligente e Atraente');
+  const [autoStartCall, setAutoStartCall] = useState<boolean>(settings.autoStartCall ?? false);
+  const [showTopHeader, setShowTopHeader] = useState<boolean>(settings.showTopHeader ?? true);
   const [customInstructions, setCustomInstructions] = useState<string>(settings.customInstructions || '');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
@@ -34,6 +36,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       ttsVoice,
       aiPersonality,
       autoSpeak: true,
+      autoStartCall,
+      showTopHeader,
       customInstructions: customInstructions.trim(),
     };
     onSaveSettings(updated);
@@ -256,6 +260,72 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {testMessage}
               </div>
             )}
+          </div>
+
+          {/* AUTO-START VIDEO CALL TOGGLE */}
+          <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200/80 flex items-center justify-between gap-4">
+            <div>
+              <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <span>📹 Iniciar Chamada Automaticamente</span>
+                {autoStartCall && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">
+                    ATIVADO
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Ao abrir o aplicativo, a videochamada com a IA inicia imediatamente sem precisar clicar em nenhum botão.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAutoStartCall(!autoStartCall)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                autoStartCall ? 'bg-indigo-600' : 'bg-slate-300'
+              }`}
+              role="switch"
+              aria-checked={autoStartCall}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  autoStartCall ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* SHOW/HIDE TOP HEADER BANNER TOGGLE */}
+          <div className="p-4 rounded-xl bg-slate-100/80 border border-slate-200 flex items-center justify-between gap-4">
+            <div>
+              <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <span>🖼️ Ocultar / Exibir Banner de Destaque no Topo</span>
+                {!showTopHeader && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold uppercase">
+                    OCULTO
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Oculta o cabeçalho superior/banner de destaque com contadores para liberar mais espaço na tela.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTopHeader(!showTopHeader)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                showTopHeader ? 'bg-indigo-600' : 'bg-slate-300'
+              }`}
+              role="switch"
+              aria-checked={showTopHeader}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  showTopHeader ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
 
           {/* Voice Selection */}

@@ -10,6 +10,7 @@ interface HeaderProps {
   onTestReminder: () => void;
   onOpenSettings: () => void;
   tasks: Task[];
+  showTopHeader?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,8 +21,13 @@ export const Header: React.FC<HeaderProps> = ({
   onTestReminder,
   onOpenSettings,
   tasks,
+  showTopHeader = true,
 }) => {
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+
+  if (!showTopHeader) {
+    return null;
+  }
 
   const pendingCount = tasks.filter((t) => t.status === 'PENDENTE').length;
   const inProgressCount = tasks.filter((t) => t.status === 'A FAZER').length;
