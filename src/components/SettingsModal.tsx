@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check } from 'lucide-react';
 import { AppSettings } from '../types';
-import { DEFAULT_GEMINI_KEY, playAIVoice } from '../services/api';
+import { DEFAULT_GEMINI_KEY_1, DEFAULT_GEMINI_KEY_2, DEFAULT_GEMINI_KEY_3, playAIVoice } from '../services/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,11 +17,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveSettings,
 }) => {
   const [useCustomApiKey, setUseCustomApiKey] = useState<boolean>(settings.useCustomApiKey ?? false);
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(settings.geminiApiKey || DEFAULT_GEMINI_KEY);
+  const [selectedPresetKey, setSelectedPresetKey] = useState<'key1' | 'key2' | 'key3' | 'custom'>(
+    settings.selectedPresetKey ||
+      (settings.geminiApiKey === DEFAULT_GEMINI_KEY_2
+        ? 'key2'
+        : settings.geminiApiKey === DEFAULT_GEMINI_KEY_3
+        ? 'key3'
+        : 'key1')
+  );
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(settings.geminiApiKey || DEFAULT_GEMINI_KEY_1);
   const [ttsVoice, setTtsVoice] = useState<string>(settings.ttsVoice || 'Kore');
   const [aiPersonality, setAiPersonality] = useState<string>(settings.aiPersonality || 'Acolhedora, Inteligente e Atraente');
   const [autoStartCall, setAutoStartCall] = useState<boolean>(settings.autoStartCall ?? false);
-  const [showTopHeader, setShowTopHeader] = useState<boolean>(settings.showTopHeader ?? true);
+  const [showTopHeader, setShowTopHeader] = useState<boolean>(settings.showTopHeader ?? false);
   const [customInstructions, setCustomInstructions] = useState<string>(settings.customInstructions || '');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
@@ -29,10 +37,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleSelectPreset = (preset: 'key1' | 'key2' | 'key3' | 'custom') => {
+    setSelectedPresetKey(preset);
+    if (preset === 'key1') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_1);
+    } else if (preset === 'key2') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_2);
+    } else if (preset === 'key3') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_3);
+    }
+  };
+
   const handleSave = () => {
     const updated: AppSettings = {
       useCustomApiKey,
-      geminiApiKey: geminiApiKey.trim() || DEFAULT_GEMINI_KEY,
+      selectedPresetKey,
+      geminiApiKey: geminiApiKey.trim() || DEFAULT_GEMINI_KEY_1,
       ttsVoice,
       aiPersonality,
       autoSpeak: true,
@@ -45,7 +65,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleResetDefaultKey = () => {
-    setGeminiApiKey(DEFAULT_GEMINI_KEY);
+    setSelectedPresetKey('key1');
+    setUseCustomApiKey(false);
+    setGeminiApiKey(DEFAULT_GEMINI_KEY_1);
   };
 
   const handleTestKey = async () => {
@@ -188,19 +210,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
+            {/* PRESET KEYS SELECTION */}
+            <div className="space-y-2 pt-1">
+              <label className="text-xs font-semibold text-slate-700">Selecione uma das Chaves de API Padrão ou Insira a Sua:</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('key1')}
+                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key1'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate">
+                    <p className="text-xs font-bold text-indigo-900">⭐ Chave Padrão 1 (Principal)</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">AIzaSyBuJvwo...</p>
+                  </div>
+                  {selectedPresetKey === 'key1' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('key2')}
+                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key2'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate">
+                    <p className="text-xs font-bold">Chave Padrão 2</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">AIzaSyDMauXE...</p>
+                  </div>
+                  {selectedPresetKey === 'key2' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('key3')}
+                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key3'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate">
+                    <p className="text-xs font-bold">Chave Padrão 3</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">AQ.Ab8RN6IZ3...</p>
+                  </div>
+                  {selectedPresetKey === 'key3' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('custom')}
+                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'custom'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate">
+                    <p className="text-xs font-bold">Personalizada</p>
+                    <p className="text-[10px] text-slate-500 truncate">Sua própria chave</p>
+                  </div>
+                  {selectedPresetKey === 'custom' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
+                </button>
+              </div>
+            </div>
+
             {!useCustomApiKey ? (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1">
                 <div className="flex items-center justify-between font-bold">
                   <span className="flex items-center gap-1.5 text-emerald-800">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    Chave do Arquivo .ENV Ativada com Prioridade!
+                    Chave de Servidor (.ENV) Ativa
                   </span>
                   <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full font-mono">
                     GEMINI_API_KEY
                   </span>
                 </div>
                 <p className="text-slate-600">
-                  O sistema está utilizando a chave de API oficial configurada no servidor (.env). A chave personalizada abaixo está desativada pelo toggle.
+                  O servidor responde com prioridade. Se quiser forçar o uso da chave selecionada acima no navegador, ative o toggle de "Chave Customizada".
                 </p>
               </div>
             ) : null}
@@ -210,7 +302,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="text"
                 disabled={!useCustomApiKey}
                 value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
+                onChange={(e) => {
+                  setGeminiApiKey(e.target.value);
+                  setSelectedPresetKey('custom');
+                }}
                 placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
                 className="w-full pl-3 pr-24 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />

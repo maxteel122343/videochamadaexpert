@@ -70,6 +70,7 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isAdviceModalOpen, setIsAdviceModalOpen] = useState<boolean>(false);
+  const [isUserCamPrimary, setIsUserCamPrimary] = useState<boolean>(true);
 
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -906,7 +907,7 @@ export default function App() {
         onTestReminder={() => handleTestReminderForTask()}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         tasks={tasks}
-        showTopHeader={settings.showTopHeader ?? true}
+        showTopHeader={settings.showTopHeader ?? false}
       />
 
       {/* TASK CREATED OVERLAY (BLOCKING POPUP UNTIL USER CONFIRMS STATUS) */}
@@ -966,6 +967,8 @@ export default function App() {
                     isAnalyzingVision={isAnalyzingVision}
                     isMutedAI={isMutedAI}
                     onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+                    isUserCamPrimary={isUserCamPrimary}
+                    onToggleUserCamPrimary={() => setIsUserCamPrimary(!isUserCamPrimary)}
                   />
                 </div>
 
@@ -986,7 +989,7 @@ export default function App() {
                   onToggleChat={() => setIsChatOpen(!isChatOpen)}
                   onOpenAdviceModal={() => setIsAdviceModalOpen(true)}
                   onAnalyzeCameraVision={() => {
-                    const btn = document.querySelector<HTMLButtonElement>('[title*="Tirar foto da câmera"]');
+                    const btn = document.querySelector<HTMLButtonElement>('[title*="Analisar Foto"]');
                     btn?.click();
                   }}
                   isAnalyzingVision={isAnalyzingVision}
@@ -994,6 +997,9 @@ export default function App() {
                   onToggleVoiceRecording={toggleVoiceRecording}
                   isFullscreen={isFullscreen}
                   onToggleFullscreen={handleToggleFullscreen}
+                  aiState={aiState}
+                  isUserCamPrimary={isUserCamPrimary}
+                  onToggleUserCamPrimary={() => setIsUserCamPrimary(!isUserCamPrimary)}
                 />
               </div>
 
@@ -1043,11 +1049,11 @@ export default function App() {
       </div>
 
       {/* MOBILE RESPONSIVE LAYOUT (md:hidden) */}
-      <main className="md:hidden flex-1 p-2 flex flex-col gap-2">
+      <main className="md:hidden flex-1 p-2 flex flex-col gap-2 overflow-x-hidden">
         {activeMobileTab === 'call' && (
-          <div className="flex flex-col h-[calc(100vh-140px)] gap-2">
-            {/* Top Half (~50% height): User Camera / Video Stage */}
-            <div className="h-[48%] rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
+          <div className="flex flex-col gap-3 min-h-0 h-[calc(100dvh-80px)] overflow-y-auto pb-20">
+            {/* Top Section: User Camera / Video Stage */}
+            <div className="shrink-0 rounded-2xl overflow-hidden shadow-lg border border-slate-800 bg-slate-900">
               <VideoCallStage
                 isCallActive={isCallActive}
                 onStartCall={handleStartCall}
@@ -1071,18 +1077,55 @@ export default function App() {
                 isAnalyzingVision={isAnalyzingVision}
                 isMutedAI={isMutedAI}
                 onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+                isUserCamPrimary={isUserCamPrimary}
+                onToggleUserCamPrimary={() => setIsUserCamPrimary(!isUserCamPrimary)}
               />
             </div>
 
-            {/* Bottom Half (~50% height): AI Chat Transcript */}
-            <div className="h-[52%] rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
-              <ChatDrawer
-                messages={messages}
-                onSendMessage={handleUserMessage}
+            {/* Middle Section: Integrated Control Bar */}
+            <div className="shrink-0">
+              <CallControls
                 isCallActive={isCallActive}
-                isLoadingAi={isLoadingAi}
+                onToggleCall={() => (isCallActive ? handleEndCall() : handleStartCall())}
+                isMicOn={isMicOn}
+                onToggleMic={() => setIsMicOn(!isMicOn)}
+                isVideoOn={isVideoOn}
+                onToggleVideo={() => setIsVideoOn(!isVideoOn)}
+                isMutedAI={isMutedAI}
+                onToggleMuteAI={() => setIsMutedAI(!isMutedAI)}
+                isHandsFreeMode={isHandsFreeMode}
+                onToggleHandsFreeMode={() => setIsHandsFreeMode(!isHandsFreeMode)}
+                isTasksOpen={isTasksOpen}
+                onToggleTasks={() => setIsTasksOpen(!isTasksOpen)}
+                isChatOpen={isChatOpen}
+                onToggleChat={() => setIsChatOpen(!isChatOpen)}
+                onOpenAdviceModal={() => setIsAdviceModalOpen(true)}
+                onAnalyzeCameraVision={() => {
+                  const btn = document.querySelector<HTMLButtonElement>('[title*="Analisar Foto"]');
+                  btn?.click();
+                }}
+                isAnalyzingVision={isAnalyzingVision}
+                isRecordingAudio={isRecordingAudio}
+                onToggleVoiceRecording={toggleVoiceRecording}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={handleToggleFullscreen}
+                aiState={aiState}
+                isUserCamPrimary={isUserCamPrimary}
+                onToggleUserCamPrimary={() => setIsUserCamPrimary(!isUserCamPrimary)}
               />
             </div>
+
+            {/* Optional AI Chat Transcript inside Call Tab when enabled */}
+            {isChatOpen && (
+              <div className="h-72 shrink-0 rounded-2xl overflow-hidden shadow-lg border border-slate-200 bg-white">
+                <ChatDrawer
+                  messages={messages}
+                  onSendMessage={handleUserMessage}
+                  isCallActive={isCallActive}
+                  isLoadingAi={isLoadingAi}
+                />
+              </div>
+            )}
           </div>
         )}
 

@@ -47,6 +47,7 @@ export interface AudioVisualizerData {
 export interface AppSettings {
   useCustomApiKey: boolean;
   geminiApiKey: string;
+  selectedPresetKey?: 'key1' | 'key2' | 'key3' | 'custom';
   ttsVoice: string;
   aiPersonality: string;
   autoSpeak: boolean;

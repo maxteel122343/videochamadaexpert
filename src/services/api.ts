@@ -1,7 +1,10 @@
 import { Task, ChatMessage, AppSettings } from "../types";
 import { GoogleGenAI, Modality } from "@google/genai";
 
-export const DEFAULT_GEMINI_KEY = "AIzaSyDMauXEsNaIfCcXs5Ry4eHMSfTHKC0A-uU";
+export const DEFAULT_GEMINI_KEY_1 = "";
+export const DEFAULT_GEMINI_KEY_2 = "";
+export const DEFAULT_GEMINI_KEY_3 = "";
+export const DEFAULT_GEMINI_KEY = DEFAULT_GEMINI_KEY_1;
 
 export function getSavedSettings(): AppSettings {
   const saved = localStorage.getItem('app_settings');
@@ -10,12 +13,13 @@ export function getSavedSettings(): AppSettings {
       const parsed = JSON.parse(saved);
       return {
         useCustomApiKey: parsed.useCustomApiKey ?? false,
-        geminiApiKey: parsed.geminiApiKey || DEFAULT_GEMINI_KEY,
+        geminiApiKey: parsed.geminiApiKey || DEFAULT_GEMINI_KEY_1,
+        selectedPresetKey: parsed.selectedPresetKey || 'key1',
         ttsVoice: parsed.ttsVoice || "Kore",
         aiPersonality: parsed.aiPersonality || "Acolhedora, Inteligente e Atraente",
         autoSpeak: parsed.autoSpeak ?? true,
         autoStartCall: parsed.autoStartCall ?? false,
-        showTopHeader: parsed.showTopHeader ?? true,
+        showTopHeader: parsed.showTopHeader ?? false,
         customInstructions: parsed.customInstructions || '',
       };
     } catch (e) {
@@ -24,12 +28,13 @@ export function getSavedSettings(): AppSettings {
   }
   return {
     useCustomApiKey: false,
-    geminiApiKey: DEFAULT_GEMINI_KEY,
+    geminiApiKey: DEFAULT_GEMINI_KEY_1,
+    selectedPresetKey: 'key1',
     ttsVoice: "Kore", // Kore, Aoede, Fenrir, Puck, Charon
     aiPersonality: "Acolhedora, Inteligente e Atraente",
     autoSpeak: true,
     autoStartCall: false,
-    showTopHeader: true,
+    showTopHeader: false,
     customInstructions: "",
   };
 }
