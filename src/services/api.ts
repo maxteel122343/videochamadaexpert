@@ -1,7 +1,37 @@
 import { Task, ChatMessage, AppSettings } from "../types";
 import { GoogleGenAI, Modality } from "@google/genai";
 
-export const DEFAULT_GEMINI_KEY = "AQ.Ab8RN6LQI_k-dZOrvRJk_7mXFiSyKvPZZ17WmpYrU9kG5vs-1w";
+const getEnvKey = (envName: string) => {
+  try {
+    const keysToTry = [
+      envName,
+      `VITE_${envName}`,
+      // Handle potential typo seen in Vercel settings (GEMINI_API_KAY)
+      envName === 'GEMINI_API_KEY' ? 'GEMINI_API_KAY' : '',
+      envName === 'GEMINI_API_KEY' ? 'VITE_GEMINI_API_KAY' : '',
+    ].filter(Boolean);
+
+    if (typeof process !== "undefined" && process?.env) {
+      for (const k of keysToTry) {
+        if (process.env[k]) return process.env[k] as string;
+      }
+    }
+    const metaEnv = (import.meta as any)?.env;
+    if (metaEnv) {
+      for (const k of keysToTry) {
+        if (metaEnv[k]) return metaEnv[k] as string;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+};
+
+export const DEFAULT_GEMINI_KEY_1 = getEnvKey("GEMINI_API_KEY");
+export const DEFAULT_GEMINI_KEY_2 = getEnvKey("GEMINI_API_KEY_2");
+export const DEFAULT_GEMINI_KEY_3 = getEnvKey("GEMINI_API_KEY_3");
+export const DEFAULT_GEMINI_KEY = DEFAULT_GEMINI_KEY_1 || DEFAULT_GEMINI_KEY_2 || DEFAULT_GEMINI_KEY_3 || "";
 
 export function getSavedSettings(): AppSettings {
   const saved = localStorage.getItem('app_settings');
@@ -10,10 +40,14 @@ export function getSavedSettings(): AppSettings {
       const parsed = JSON.parse(saved);
       return {
         useCustomApiKey: parsed.useCustomApiKey ?? false,
-        geminiApiKey: parsed.geminiApiKey || DEFAULT_GEMINI_KEY,
+        geminiApiKey: parsed.geminiApiKey || DEFAULT_GEMINI_KEY_1,
+        selectedPresetKey: parsed.selectedPresetKey || 'key1',
         ttsVoice: parsed.ttsVoice || "Kore",
         aiPersonality: parsed.aiPersonality || "Acolhedora, Inteligente e Atraente",
-        autoSpeak: parsed.autoSpeak ?? true,
+        autoSpeak: parsed.autoSpeak ?? false,
+        disableTtsVoice: parsed.disableTtsVoice ?? true,
+        autoStartCall: parsed.autoStartCall ?? false,
+        showTopHeader: parsed.showTopHeader ?? false,
         customInstructions: parsed.customInstructions || '',
       };
     } catch (e) {
@@ -22,10 +56,14 @@ export function getSavedSettings(): AppSettings {
   }
   return {
     useCustomApiKey: false,
-    geminiApiKey: DEFAULT_GEMINI_KEY,
+    geminiApiKey: DEFAULT_GEMINI_KEY_1,
+    selectedPresetKey: 'key1',
     ttsVoice: "Kore", // Kore, Aoede, Fenrir, Puck, Charon
     aiPersonality: "Acolhedora, Inteligente e Atraente",
-    autoSpeak: true,
+    autoSpeak: false,
+    disableTtsVoice: true,
+    autoStartCall: false,
+    showTopHeader: false,
     customInstructions: "",
   };
 }
@@ -35,11 +73,15 @@ function getHeaders() {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  
-  if (settings.useCustomApiKey && settings.geminiApiKey) {
-    headers["x-gemini-api-key"] = settings.geminiApiKey.trim();
+
+  const keyToSend = (settings.geminiApiKey && settings.geminiApiKey.trim())
+    ? settings.geminiApiKey.trim()
+    : DEFAULT_GEMINI_KEY;
+
+  if (keyToSend) {
+    headers["x-gemini-api-key"] = keyToSend;
   }
-  
+
   return headers;
 }
 
@@ -249,68 +291,127 @@ export async function generateReminderVoice(
   }
 }
 
-// Resilient Audio Speech Handler with Gemini TTS + Client Direct Call + Seamless Web Speech API
-export async function playAIVoice(text: string, customVoice?: string): Promise<void> {
-  const settings = getSavedSettings();
-  const selectedVoice = customVoice || settings.ttsVoice || "Kore";
+// Audio Concurrency Control Locks
+let currentAudioCtx: AudioContext | null = null;
+let currentBufferSource: AudioBufferSourceNode | null = null;
+let isAITalkingFlag = false;
 
-  // Option A: Direct Client SDK Call if Custom API Key is active on client
-  if (settings.useCustomApiKey && settings.geminiApiKey && settings.geminiApiKey.trim()) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey.trim() });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: `Fale em português com tom muito natural, fluido e atraente: ${text}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: selectedVoice },
-            },
-          },
-        },
-      });
-
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
-        await playPcmBase64(base64Audio);
-        return;
-      }
-    } catch (clientErr) {
-      console.warn("Síntese nativa com chave do cliente indisponível, recorrendo ao backend ou voz local:", clientErr);
-    }
-  }
-
-  // Option B: Server Proxy Call
+export function stopAllAIAudio(): void {
   try {
-    const response = await fetch("/api/gemini/speak", {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify({
-        text,
-        voiceName: selectedVoice,
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json().catch(() => ({ success: false }));
-      if (data.success && data.audioBase64) {
-        await playPcmBase64(data.audioBase64);
-        return;
-      }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    if (currentBufferSource) {
+      try { currentBufferSource.stop(); } catch (e) {}
+      currentBufferSource = null;
+    }
+    if (currentAudioCtx && currentAudioCtx.state !== 'closed') {
+      try { currentAudioCtx.close(); } catch (e) {}
+      currentAudioCtx = null;
     }
   } catch (err) {
-    console.warn("Voz nativa do Gemini indisponível. Ativando síntese local do navegador...");
+    console.warn("Error stopping audio:", err);
+  } finally {
+    isAITalkingFlag = false;
+  }
+}
+
+export function getIsAITalking(): boolean {
+  return isAITalkingFlag;
+}
+
+// Resilient Audio Speech Handler with Gemini TTS + Client Direct Call + Seamless Web Speech API
+export async function playAIVoice(
+  text: string,
+  customVoiceOrOptions?: string | { customVoice?: string; isManualTest?: boolean }
+): Promise<void> {
+  const settings = getSavedSettings();
+
+  const isManualTest = typeof customVoiceOrOptions === 'object'
+    ? customVoiceOrOptions.isManualTest
+    : false;
+
+  const customVoice = typeof customVoiceOrOptions === 'string'
+    ? customVoiceOrOptions
+    : customVoiceOrOptions?.customVoice;
+
+  // Se a voz sintética estiver desativada ou autoSpeak desabilitado (e não for um teste manual de voz)
+  if (!isManualTest && (settings.disableTtsVoice || !settings.autoSpeak)) {
+    console.log("Voz sintética desativada nas configurações (Chat e Áudio em silêncio).");
+    return;
   }
 
-  // Option C: Native Web Speech API Fallback (Smooth, zero red console errors)
-  speakWithWebSpeech(text);
+  // Stop any currently playing speech to avoid overlapping voices ("duas falas ao mesmo tempo")
+  stopAllAIAudio();
+  isAITalkingFlag = true;
+
+  const selectedVoice = customVoice || settings.ttsVoice || "Kore";
+
+  try {
+    // Option A: Direct Client SDK Call if Custom API Key is active on client
+    if (settings.useCustomApiKey && settings.geminiApiKey && settings.geminiApiKey.trim()) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: settings.geminiApiKey.trim() });
+        const response = await ai.models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `Fale em português com tom muito natural, fluido e atraente: ${text}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
+              },
+            },
+          },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          await playPcmBase64(base64Audio);
+          return;
+        }
+      } catch (clientErr) {
+        console.warn("Síntese nativa com chave do cliente indisponível, recorrendo ao backend ou voz local:", clientErr);
+      }
+    }
+
+    // Option B: Server Proxy Call
+    try {
+      const response = await fetch("/api/gemini/speak", {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({
+          text,
+          voiceName: selectedVoice,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => ({ success: false }));
+        if (data.success && data.audioBase64) {
+          await playPcmBase64(data.audioBase64);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Voz nativa do Gemini indisponível. Ativando síntese local do navegador...");
+    }
+
+    // Option C: Native Web Speech API Fallback (Smooth, zero red console errors)
+    await speakWithWebSpeech(text);
+  } finally {
+    // Small delay before unlocking to avoid mic recording echo
+    setTimeout(() => {
+      isAITalkingFlag = false;
+    }, 400);
+  }
 }
 
 // Fallback to Web Speech API
 function speakWithWebSpeech(text: string): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      isAITalkingFlag = false;
       resolve();
       return;
     }
@@ -347,7 +448,10 @@ async function playPcmBase64(base64Data: string): Promise<void> {
         bytes[i] = binary.charCodeAt(i);
       }
 
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioContextClass({ sampleRate: 24000 });
+      currentAudioCtx = audioCtx;
+
       const pcm16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
@@ -358,9 +462,13 @@ async function playPcmBase64(base64Data: string): Promise<void> {
       buffer.getChannelData(0).set(float32);
 
       const source = audioCtx.createBufferSource();
+      currentBufferSource = source;
       source.buffer = buffer;
       source.connect(audioCtx.destination);
-      source.onended = () => resolve();
+      source.onended = () => {
+        currentBufferSource = null;
+        resolve();
+      };
       source.start();
     } catch (err) {
       console.warn("Audio playback warn:", err);

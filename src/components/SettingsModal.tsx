@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Key, Volume2, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, Key, Volume2, VolumeX, Sparkles, CheckCircle2, Sliders, ShieldCheck, RefreshCw, Check, Copy } from 'lucide-react';
 import { AppSettings } from '../types';
-import { DEFAULT_GEMINI_KEY, playAIVoice } from '../services/api';
+import { DEFAULT_GEMINI_KEY_1, DEFAULT_GEMINI_KEY_2, DEFAULT_GEMINI_KEY_3, playAIVoice } from '../services/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,23 +17,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSaveSettings,
 }) => {
   const [useCustomApiKey, setUseCustomApiKey] = useState<boolean>(settings.useCustomApiKey ?? false);
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(settings.geminiApiKey || DEFAULT_GEMINI_KEY);
+  const [selectedPresetKey, setSelectedPresetKey] = useState<'key1' | 'key2' | 'key3' | 'custom'>(
+    settings.selectedPresetKey ||
+      (settings.geminiApiKey === DEFAULT_GEMINI_KEY_2
+        ? 'key2'
+        : settings.geminiApiKey === DEFAULT_GEMINI_KEY_3
+        ? 'key3'
+        : 'key1')
+  );
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(
+    settings.geminiApiKey && settings.geminiApiKey.trim().length > 0
+      ? settings.geminiApiKey
+      : DEFAULT_GEMINI_KEY_1
+  );
   const [ttsVoice, setTtsVoice] = useState<string>(settings.ttsVoice || 'Kore');
+  const [disableTtsVoice, setDisableTtsVoice] = useState<boolean>(settings.disableTtsVoice ?? true);
   const [aiPersonality, setAiPersonality] = useState<string>(settings.aiPersonality || 'Acolhedora, Inteligente e Atraente');
+  const [autoStartCall, setAutoStartCall] = useState<boolean>(settings.autoStartCall ?? false);
+  const [showTopHeader, setShowTopHeader] = useState<boolean>(settings.showTopHeader ?? false);
   const [customInstructions, setCustomInstructions] = useState<string>(settings.customInstructions || '');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState<string>('');
   const [isTestingVoice, setIsTestingVoice] = useState<boolean>(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleCopy = (textToCopy: string, label: string) => {
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedKey(label);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
+  };
+
+  const handleSelectPreset = (preset: 'key1' | 'key2' | 'key3' | 'custom') => {
+    setSelectedPresetKey(preset);
+    setUseCustomApiKey(true);
+    if (preset === 'key1') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_1);
+    } else if (preset === 'key2') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_2);
+    } else if (preset === 'key3') {
+      setGeminiApiKey(DEFAULT_GEMINI_KEY_3);
+    }
+  };
 
   const handleSave = () => {
     const updated: AppSettings = {
       useCustomApiKey,
-      geminiApiKey: geminiApiKey.trim() || DEFAULT_GEMINI_KEY,
+      selectedPresetKey,
+      geminiApiKey: geminiApiKey.trim() || DEFAULT_GEMINI_KEY_1,
       ttsVoice,
       aiPersonality,
-      autoSpeak: true,
+      autoSpeak: !disableTtsVoice,
+      disableTtsVoice,
+      autoStartCall,
+      showTopHeader,
       customInstructions: customInstructions.trim(),
     };
     onSaveSettings(updated);
@@ -41,7 +82,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleResetDefaultKey = () => {
-    setGeminiApiKey(DEFAULT_GEMINI_KEY);
+    setSelectedPresetKey('key1');
+    setUseCustomApiKey(false);
+    setGeminiApiKey(DEFAULT_GEMINI_KEY_1);
   };
 
   const handleTestKey = async () => {
@@ -121,7 +164,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handlePreviewVoice = async () => {
     setIsTestingVoice(true);
     try {
-      await playAIVoice('Olá! Esta é a minha voz atraente para a nossa videochamada.', ttsVoice);
+      await playAIVoice('Olá! Esta é a minha voz atraente para a nossa videochamada.', { customVoice: ttsVoice, isManualTest: true });
     } catch (e) {
       console.error(e);
     } finally {
@@ -184,40 +227,188 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
+            {/* PRESET KEYS SELECTION */}
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-700">Selecione uma das Chaves de API Padrão ou Insira a Sua:</label>
+                {copiedKey && (
+                  <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 animate-fade-in flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Copiado!
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div
+                  onClick={() => handleSelectPreset('key1')}
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key1'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate min-w-0 flex-1">
+                    <p className="text-xs font-bold text-indigo-900">⭐ Chave Padrão 1 (Principal)</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_1 ? `${DEFAULT_GEMINI_KEY_1.slice(0, 12)}...` : 'Chave Padrão 1'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_1, 'key1');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key1' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key1' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => handleSelectPreset('key2')}
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key2'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate min-w-0 flex-1">
+                    <p className="text-xs font-bold">Chave Padrão 2</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_2 ? `${DEFAULT_GEMINI_KEY_2.slice(0, 12)}...` : 'Chave Padrão 2'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_2, 'key2');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key2' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key2' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => handleSelectPreset('key3')}
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'key3'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate min-w-0 flex-1">
+                    <p className="text-xs font-bold">Chave Padrão 3</p>
+                    <p className="text-[10px] text-slate-500 font-mono truncate">
+                      {DEFAULT_GEMINI_KEY_3 ? `${DEFAULT_GEMINI_KEY_3.slice(0, 12)}...` : 'Chave Padrão 3'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-1">
+                    <button
+                      type="button"
+                      title="Copiar Chave 3"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(DEFAULT_GEMINI_KEY_3, 'key3');
+                      }}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition"
+                    >
+                      {copiedKey === 'key3' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                    {selectedPresetKey === 'key3' && <Check className="w-4 h-4 text-indigo-600" />}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => handleSelectPreset('custom')}
+                  className={`p-2.5 rounded-lg border cursor-pointer text-left flex items-center justify-between transition ${
+                    selectedPresetKey === 'custom'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-bold ring-1 ring-indigo-500'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="truncate">
+                    <p className="text-xs font-bold">Personalizada</p>
+                    <p className="text-[10px] text-slate-500 truncate">Sua própria chave</p>
+                  </div>
+                  {selectedPresetKey === 'custom' && <Check className="w-4 h-4 text-indigo-600 shrink-0 ml-1" />}
+                </div>
+              </div>
+            </div>
+
             {!useCustomApiKey ? (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 space-y-1">
                 <div className="flex items-center justify-between font-bold">
                   <span className="flex items-center gap-1.5 text-emerald-800">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    Chave do Arquivo .ENV Ativada com Prioridade!
+                    Chave de Servidor (.ENV) Ativa
                   </span>
                   <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full font-mono">
                     GEMINI_API_KEY
                   </span>
                 </div>
                 <p className="text-slate-600">
-                  O sistema está utilizando a chave de API oficial configurada no servidor (.env). A chave personalizada abaixo está desativada pelo toggle.
+                  O servidor responde com prioridade. Se quiser forçar o uso da chave selecionada acima no navegador, ative o toggle de "Chave Customizada".
                 </p>
               </div>
             ) : null}
 
-            <div className={`relative ${!useCustomApiKey ? 'opacity-50 pointer-events-none' : ''}`}>
-              <input
-                type="text"
-                disabled={!useCustomApiKey}
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
-                className="w-full pl-3 pr-24 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleTestKey}
-                disabled={testStatus === 'testing' || !useCustomApiKey}
-                className="absolute right-1.5 top-1.5 px-3 py-1 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
-              >
-                {testStatus === 'testing' ? 'Testando...' : 'Testar Key'}
-              </button>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-slate-600 flex items-center justify-between">
+                <span>Chave de API Selecionada (Visível para Copiar / Testar):</span>
+                {copiedKey === 'input' && (
+                  <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Chave Copiada!
+                  </span>
+                )}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={geminiApiKey}
+                  onChange={(e) => {
+                    setGeminiApiKey(e.target.value);
+                    setSelectedPresetKey('custom');
+                    setUseCustomApiKey(true);
+                  }}
+                  placeholder="Cole sua GEMINI_API_KEY personalizada aqui"
+                  className="w-full pl-3 pr-32 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-mono text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                  <button
+                    type="button"
+                    title="Copiar esta Chave"
+                    onClick={() => handleCopy(geminiApiKey, 'input')}
+                    className="p-1.5 text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200 rounded-md text-xs transition flex items-center gap-1"
+                  >
+                    {copiedKey === 'input' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseCustomApiKey(true);
+                      handleTestKey();
+                    }}
+                    disabled={testStatus === 'testing'}
+                    className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition"
+                  >
+                    {testStatus === 'testing' ? 'Testando...' : 'Testar Key'}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-between pt-1">
@@ -258,13 +449,126 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </div>
 
-          {/* Voice Selection */}
-          <div className="space-y-2">
-            <label className="font-bold text-slate-900 flex items-center gap-2">
-              <Volume2 className="w-4 h-4 text-emerald-600" />
-              <span>Voz Atraente da IA para Videochamada</span>
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* AUTO-START VIDEO CALL TOGGLE */}
+          <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200/80 flex items-center justify-between gap-4">
+            <div>
+              <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <span>📹 Iniciar Chamada Automaticamente</span>
+                {autoStartCall && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold uppercase">
+                    ATIVADO
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Ao abrir o aplicativo, a videochamada com a IA inicia imediatamente sem precisar clicar em nenhum botão.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAutoStartCall(!autoStartCall)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                autoStartCall ? 'bg-indigo-600' : 'bg-slate-300'
+              }`}
+              role="switch"
+              aria-checked={autoStartCall}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  autoStartCall ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* SHOW/HIDE TOP HEADER BANNER TOGGLE */}
+          <div className="p-4 rounded-xl bg-slate-100/80 border border-slate-200 flex items-center justify-between gap-4">
+            <div>
+              <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <span>🖼️ Ocultar / Exibir Banner de Destaque no Topo</span>
+                {!showTopHeader && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold uppercase">
+                    OCULTO
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Oculta o cabeçalho superior/banner de destaque com contadores para liberar mais espaço na tela.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTopHeader(!showTopHeader)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                showTopHeader ? 'bg-indigo-600' : 'bg-slate-300'
+              }`}
+              role="switch"
+              aria-checked={showTopHeader}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                  showTopHeader ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Voice Selection & Loop Control */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <label className="font-bold text-slate-900 flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-emerald-600" />
+                <span>Voz Sintética da IA para Videochamada</span>
+              </label>
+            </div>
+
+            {/* TOGGLE TO DISABLE SYNTHETIC VOICE (LOOP PREVENTION) */}
+            <div className={`p-3.5 rounded-xl border transition flex items-center justify-between gap-3 ${
+              disableTtsVoice
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                : 'bg-emerald-50/60 border-emerald-200 text-slate-800'
+            }`}>
+              <div className="flex items-start gap-2.5">
+                {disableTtsVoice ? (
+                  <VolumeX className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                ) : (
+                  <Volume2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="font-bold text-xs sm:text-sm flex items-center gap-2">
+                    <span>{disableTtsVoice ? 'Voz Sintética DESATIVADA (Apenas Texto)' : 'Voz Sintética ATIVADA (Áudio em Tempo Real)'}</span>
+                    {disableTtsVoice && (
+                      <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold uppercase">
+                        Modo Sem Loop
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-0.5 leading-snug">
+                    Desative a reprodução de voz caso seu microfone capture o som do alto-falante e cause eco/looping. A resposta continuará aparecendo no chat de transcrição.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDisableTtsVoice(!disableTtsVoice)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  disableTtsVoice ? 'bg-amber-500' : 'bg-emerald-600'
+                }`}
+                role="switch"
+                aria-checked={disableTtsVoice}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    disableTtsVoice ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${disableTtsVoice ? 'opacity-50 pointer-events-none' : ''}`}>
               {[
                 { id: 'Kore', name: 'Kore', desc: 'Feminina Acolhedora, Fluida e Atraente' },
                 { id: 'Aoede', name: 'Aoede', desc: 'Feminina Expressiva e Vibrante' },
